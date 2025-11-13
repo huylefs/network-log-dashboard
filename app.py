@@ -525,6 +525,8 @@ def render_security_ssh(es, time_from, time_to):
         "bool": {
             "filter": [
                 {"range": {"@timestamp": {"gte": time_from, "lte": time_to}}},
+
+
                 {"match_phrase": {"message": "Failed password"}},
             ]
         }
@@ -735,12 +737,11 @@ def main():
     st.title("Network Monitoring Dashboard")
     st.caption("Streamlit + Elasticsearch (Syslog + Metricbeat + VyOS)")
 
-    try:
-        es = get_es_client()
-        # Simple health check
-        info = es.info()
-        cluster_name = info.get("cluster_name", "unknown")
-        st.sidebar.success(f"Connected to ES cluster: {cluster_name}")
+    es = get_es_client()
+    # Simple health check
+    info = es.info()
+    cluster_name = info.get("cluster_name", "unknown")
+    st.sidebar.success(f"Connected to ES cluster: {cluster_name}")
 
     time_from, time_to, time_label = sidebar_time_range()
     st.sidebar.markdown(f"**Current time range:** {time_label}")
