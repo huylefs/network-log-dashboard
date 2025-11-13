@@ -1,446 +1,417 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from elasticsearch import Elasticsearch
-import plotly.express as px
 
-# ========================
-# 0) Config Elasticsearch
-# ========================
-# Đọc từ secrets nếu có, nếu không dùng giá trị mặc định
-ES_HOST = st.secrets.get("ES_HOST", "192.168.20.50")
-ES_PORT = int(st.secrets.get("ES_PORT", 9200))
-ES_SCHEME = st.secrets.get("ES_SCHEME", "http")
-ES_USER = st.secrets.get("ES_USER", "")
-ES_PASS = st.secrets.get("ES_PASS", "")
+ES_HOST = st.secrets["ES_HOST"]
+ES_PORT = int(st.secrets.get("ES_PORT", 9243))
+ES_USER = st.secrets["ES_USER"]
+ES_PASS = st.secrets["ES_PASS"]
+ES_SCHEME = st.secrets.get("ES_SCHEME","https")
 
 SYSLOG_INDEX = "syslog-*"
 METRIC_INDEX = "metricbeat-*"
 
-if ES_USER and ES_PASS:
-    es = Elasticsearch(
-        hosts=[{"host": ES_HOST, "port": ES_PORT, "scheme": ES_SCHEME}],
-        basic_auth=(ES_USER, ES_PASS),
-        verify_certs=False,
-    )
-else:
-    es = Elasticsearch(
-        hosts=[{"host": ES_HOST, "port": ES_PORT, "scheme": ES_SCHEME}],
-        verify_certs=False,
-    )
+es = Elasticsearch(
+    hosts=[{"host": ES_HOST, "port": ES_PORT, "scheme": ES_SCHEME}], basic_auth=(ES_USER, ES_PASS), verify_certs=True)
 
-# ========================
-# 1) I18N (EN/VI)
-# ========================
-LANGS = {
-    "en": {
-        "title": "Network Monitoring Dashboards",
-        "caption": "Streamlit + Elasticsearch (Syslog + Metricbeat)",
-        "controls": "Controls",
-        "language": "Language",
-        "range": "Time range",
-        "dashboard": "Select dashboard",
-        "overview": "Overview",
-        "sys_count": "Logs over time",
-        "sev_dist": "Severity distribution",
-        "top_err_hosts": "Top hosts by errors (severity ≤ 3)",
-        "top_src_ip": "Top source IP",
-        "top_hostnames": "Top hostnames",
-        "kpi_total": "Total events",
-        "kpi_max_5m": "Max events / interval",
-        "syslog_not_found": "No syslog events in this time range.",
-        "metric": "System Health (Metricbeat)",
-        "cpu_mem_disk": "CPU / Memory / Disk over time",
-        "host_select": "Filter by hostname",
-        "no_metric": "No metricbeat data in this time range.",
-        "status_table": "Host status (latest snapshot)",
-        "col_ts": "timestamp",
-        "col_host": "hostname",
-        "col_ip": "host_ip",
-        "col_cnt": "count",
-        "col_cpu": "CPU (%)",
-        "col_mem": "Memory (%)",
-        "col_disk": "Disk max (%)",
-        "pie": "Pie",
-        "bar": "Bar",
-        "sev_chart_type": "Severity chart",
-        "refresh": "🔄 Refresh",
-    },
-    "vi": {
-        "title": "Bảng điều khiển giám sát mạng",
-        "caption": "Streamlit + Elasticsearch (Syslog + Metricbeat)",
-        "controls": "Điều khiển",
-        "language": "Ngôn ngữ",
-        "range": "Khoảng thời gian",
-        "dashboard": "Chọn bảng điều khiển",
-        "overview": "Tổng quan",
-        "sys_count": "Số lượng log theo thời gian",
-        "sev_dist": "Phân bố mức độ nghiêm trọng",
-        "top_err_hosts": "Top máy theo số lỗi (severity ≤ 3)",
-        "top_src_ip": "Top địa chỉ IP nguồn",
-        "top_hostnames": "Top hostname",
-        "kpi_total": "Tổng số sự kiện",
-        "kpi_max_5m": "Số sự kiện tối đa / khoảng",
-        "syslog_not_found": "Không có log syslog trong khoảng thời gian này.",
-        "metric": "Sức khỏe hệ thống (Metricbeat)",
-        "cpu_mem_disk": "CPU / RAM / Disk theo thời gian",
-        "host_select": "Lọc theo hostname",
-        "no_metric": "Không có dữ liệu metricbeat trong khoảng thời gian này.",
-        "status_table": "Bảng trạng thái host (snapshot mới nhất)",
-        "col_ts": "thời_gian",
-        "col_host": "hostname",
-        "col_ip": "host_ip",
-        "col_cnt": "số_lượng",
-        "col_cpu": "CPU (%)",
-        "col_mem": "Bộ nhớ (%)",
-        "col_disk": "Đĩa tối đa (%)",
-        "pie": "Tròn (Pie)",
-        "bar": "Cột (Bar)",
-        "sev_chart_type": "Kiểu biểu đồ severity",
-        "refresh": "🔄 Tải lại",
-    },
-}
-
-# ========================
-# 2) Helpers
-# ========================
+# Convert time range to ES range
 def get_time_range_gte(label: str) -> str:
-    if label == "Last 15 minutes" or label == "15 phút gần nhất":
+    if label == "Last 15 minutes":
         return "now-15m"
-    elif label == "Last 1 hour" or label == "1 giờ gần nhất":
+    elif label == "Last 1 hour":
         return "now-1h"
-    elif label == "Last 6 hours" or label == "6 giờ gần nhất":
+    elif label == "Last 6 hours":
         return "now-6h"
-    elif label == "Last 24 hours" or label == "24 giờ gần nhất":
+    elif label == "Last 24 hours":
         return "now-24h"
-    return "now-1h"
+    else:
+        return "now-1h"
 
-@st.cache_data(show_spinner=False, ttl=30)
-def es_search(index: str, body: dict) -> dict:
-    return es.search(index=index, body=body)
+#Query syslog from Elasticsearch
 
-def to_ts_df(buckets, key_field="key_as_string", value_field="doc_count"):
-    rows = [{"ts": b.get(key_field), "count": b.get(value_field, 0)} for b in buckets]
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df["ts"] = pd.to_datetime(df["ts"])
-    return df
+def query_syslog(time_range_label: str, severity_codes=None, size: int = 500) -> pd.DataFrame:
+    gte = get_time_range_gte(time_range_label)
 
-def pick_host_ip_value(host_ip):
-    if isinstance(host_ip, list) and len(host_ip) > 0:
-        return host_ip[0]
-    return host_ip
-
-# ========================
-# 3) Queries (Overview)
-# ========================
-@st.cache_data(show_spinner=False, ttl=30)
-def q_syslog_ts(gte: str, interval: str = "5m"):
-    body = {
-        "size": 0,
-        "query": {"range": {"@timestamp": {"gte": gte, "lte": "now"}}},
-        "aggs": {
-            "per": {
-                "date_histogram": {
-                    "field": "@timestamp",
-                    "fixed_interval": interval,
-                    "min_doc_count": 0,
-                }
-            }
-        },
-    }
-    res = es_search(SYSLOG_INDEX, body)
-    buckets = res.get("aggregations", {}).get("per", {}).get("buckets", [])
-    return to_ts_df(buckets)
-
-@st.cache_data(show_spinner=False, ttl=30)
-def q_severity_dist(gte: str, size: int = 10):
-    # Thử lấy theo severity_label trước, nếu rỗng thì fallback sang log.syslog.severity.name
-    body1 = {
-        "size": 0,
-        "query": {"range": {"@timestamp": {"gte": gte, "lte": "now"}}},
-        "aggs": {"sev": {"terms": {"field": "severity_label.keyword", "size": size}}},
-    }
-    res1 = es_search(SYSLOG_INDEX, body1)
-    buckets1 = res1.get("aggregations", {}).get("sev", {}).get("buckets", [])
-
-    body2 = {
-        "size": 0,
-        "query": {"range": {"@timestamp": {"gte": gte, "lte": "now"}}},
-        "aggs": {"sev": {"terms": {"field": "log.syslog.severity.name.keyword", "size": size}}},
-    }
-    res2 = es_search(SYSLOG_INDEX, body2)
-    buckets2 = res2.get("aggregations", {}).get("sev", {}).get("buckets", [])
-
-    buckets = buckets1 if len(buckets1) > 0 else buckets2
-    return pd.DataFrame([{"severity": b.get("key"), "count": b.get("doc_count", 0)} for b in buckets])
-
-@st.cache_data(show_spinner=False, ttl=30)
-def q_top_error_hosts(gte: str, size: int = 10):
-    # Lọc severity ≤ 3 qua nhiều khả năng field
-    shoulds = [
-        {"range": {"severity": {"lte": 3}}},
-        {"range": {"log.syslog.severity.code": {"lte": 3}}},
+    must_filters = [
+	{"range": {"@timestamp": {"gte": gte, "lte": "now"}}}
     ]
-    body = {
-        "size": 0,
-        "query": {"bool": {"filter": [{"range": {"@timestamp": {"gte": gte, "lte": "now"}}}], "should": shoulds, "minimum_should_match": 1}},
-        "aggs": {"by_host": {"terms": {"field": "host.hostname.keyword", "size": size}}},
-    }
-    res = es_search(SYSLOG_INDEX, body)
-    buckets = res.get("aggregations", {}).get("by_host", {}).get("buckets", [])
-    return pd.DataFrame([{"hostname": b.get("key"), "count": b.get("doc_count", 0)} for b in buckets])
 
-@st.cache_data(show_spinner=False, ttl=30)
-def q_top_source_ip_and_hostname(gte: str, size: int = 10):
-    body_ip = {
-        "size": 0,
-        "query": {"range": {"@timestamp": {"gte": gte, "lte": "now"}}},
-        "aggs": {"by_ip": {"terms": {"field": "host.ip", "size": size}}},
-    }
-    body_hn = {
-        "size": 0,
-        "query": {"range": {"@timestamp": {"gte": gte, "lte": "now"}}},
-        "aggs": {"by_hn": {"terms": {"field": "host.hostname.keyword", "size": size}}},
-    }
-    res_ip = es_search(SYSLOG_INDEX, body_ip)
-    res_hn = es_search(SYSLOG_INDEX, body_hn)
-    b_ip = res_ip.get("aggregations", {}).get("by_ip", {}).get("buckets", [])
-    b_hn = res_hn.get("aggregations", {}).get("by_hn", {}).get("buckets", [])
-    df_ip = pd.DataFrame([{"host_ip": x.get("key"), "count": x.get("doc_count", 0)} for x in b_ip])
-    df_hn = pd.DataFrame([{"hostname": x.get("key"), "count": x.get("doc_count", 0)} for x in b_hn])
-    return df_ip, df_hn
+    if severity_codes:
+        must_filters.append({
+	    "terms": {"log.syslog.severity.code": severity_codes}
+	})
 
-# ========================
-# 4) Queries (Metricbeat)
-# ========================
-@st.cache_data(show_spinner=False, ttl=30)
-def q_metric_raw(gte: str, size: int = 5000):
     body = {
-        "size": size,
-        "sort": [{"@timestamp": {"order": "desc"}}],
-        "_source": [
-            "@timestamp",
-            "host.hostname",
-            "host.ip",
-            "system.cpu.total.norm.pct",
-            "system.memory.actual.used.pct",
-            "system.filesystem.used.pct",
-            "system.filesystem.mount_point",
-        ],
-        "query": {"range": {"@timestamp": {"gte": gte, "lte": "now"}}},
+	"size": size,
+	"sort": [{"@timestamp": "desc"}],
+	"_source": [
+	    "@timestamp",
+	    "message",
+	    "host.hostname",
+	    "host.ip",
+	    "log.syslog.severity.code",
+	    "log.syslog.severity.name",
+	],
+	"query": {
+	    "bool": {
+		"filter": must_filters
+	    }
+	}
     }
-    res = es_search(METRIC_INDEX, body)
+
+    res = es.search(index=SYSLOG_INDEX, body=body)
     hits = res.get("hits", {}).get("hits", [])
+
     rows = []
     for h in hits:
         src = h.get("_source", {})
         host = src.get("host", {}) or {}
-        fs = src.get("system", {}).get("filesystem", {}) or {}
-        rows.append(
-            {
-                "timestamp": src.get("@timestamp"),
-                "hostname": host.get("hostname"),
-                "host_ip": pick_host_ip_value(host.get("ip")),
-                "cpu_pct": (src.get("system", {}).get("cpu", {}).get("total", {}).get("norm", {}).get("pct")),
-                "mem_used_pct": (src.get("system", {}).get("memory", {}).get("actual", {}).get("used", {}).get("pct")),
-                "fs_used_pct": fs.get("used", {}).get("pct"),
-                "fs_mount": fs.get("mount_point"),
-            }
-        )
+        log_sys = src.get("log", {}).get("syslog", {}) or {}
+        sev = log_sys.get("severity", {}) or {}
+
+        rows.append({
+	    "timestamp": src.get("@timestamp"),
+	    "hostname": host.get("hostname"),
+	    "host_ip": host.get("ip"),
+	    "severity_code": sev.get("code"),
+	    "severity_name": sev.get("name"),
+	    "message": src.get("message"),
+	})
     df = pd.DataFrame(rows)
     if not df.empty:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
     return df
 
-def build_status_table(df: pd.DataFrame) -> pd.DataFrame:
-    # Lấy snapshot mới nhất theo host cho CPU/Mem
-    last_cpu = (
-        df[df["cpu_pct"].notna()]
-        .sort_values("timestamp")
-        .groupby("hostname", as_index=False)
-        .tail(1)[["hostname", "host_ip", "timestamp", "cpu_pct"]]
-    )
-    last_mem = (
-        df[df["mem_used_pct"].notna()]
-        .sort_values("timestamp")
-        .groupby("hostname", as_index=False)
-        .tail(1)[["hostname", "mem_used_pct"]]
-    )
-    # Với disk: lấy max % used gần nhất trên mỗi host (trong tập đã fetch)
-    disk = (
-        df[df["fs_used_pct"].notna()][["hostname", "fs_used_pct"]]
-        .groupby("hostname", as_index=False)
-        .max()
-        .rename(columns={"fs_used_pct": "disk_max_pct"})
-    )
+#Query metricbeat
 
-    # Join
-    t = pd.merge(last_cpu, last_mem, on="hostname", how="outer")
-    t = pd.merge(t, disk, on="hostname", how="left")
+def query_metrics(time_range_label: str, size: int = 1000) -> pd.DataFrame:
+    gte = get_time_range_gte(time_range_label)
 
-    # Scale %
-    if "cpu_pct" in t.columns:
-        t["cpu_pct"] = t["cpu_pct"].apply(lambda x: round(x * 100, 1) if pd.notna(x) else x)
-    if "mem_used_pct" in t.columns:
-        t["mem_used_pct"] = t["mem_used_pct"].apply(lambda x: round(x * 100, 1) if pd.notna(x) else x)
-    if "disk_max_pct" in t.columns:
-        t["disk_max_pct"] = t["disk_max_pct"].apply(lambda x: round(x * 100, 1) if pd.notna(x) else x)
+    body = {
+	"size": size,
+	"sort": [{"@timestamp": "desc"}],
+	"_source": [
+	    "@timestamp",
+	    "host.hostname",
+	    "host.ip",
+	    "system.cpu.total.norm.pct",
+	    "system.memory.actual.used.pct",
+	    "system.filesystem.used.pct",
+	    "system.filesystem.mount_point",
+	],
+	"query": {
+	    "bool": {
+		"filter": [
+		    {"range": {"@timestamp": {"gte": gte, "lte": "now"}}}
+		]
+	    }
+	}
+    }
 
-    return t
+    res = es.search(index=METRIC_INDEX, body=body)
+    hits = res.get("hits", {}).get("hits", [])
 
-# ========================
-# 5) UI
-# ========================
-st.set_page_config(page_title="Network Dashboards", layout="wide")
-# Sidebar controls
-st.sidebar.header("Controls / Điều khiển")
-lang_label = st.sidebar.selectbox("Language / Ngôn ngữ", ["English", "Tiếng Việt"], index=0)
-LANG = "en" if lang_label == "English" else "vi"
-T = LANGS[LANG]
+    rows = []
+    for h in hits:
+        src = h.get("_source", {})
+        host = src.get("host", {}) or {}
+        fs = src.get("system", {}).get("filesystem", {}) or {}
+        rows.append({
+	    "timestamp": src.get("@timestamp"),
+	    "hostname": host.get("hostname"),
+	    "host_ip": host.get("ip"),
+	    "cpu_pct": src.get("system", {}).get("cpu", {}).get("total", {}).get("norm", {}).get("pct"),
+	    "mem_used_pct": src.get("system", {}).get("memory", {}).get("actual", {}).get("used", {}).get("pct"),
+	    "fs_used_pct": fs.get("used", {}).get("pct"),
+	    "fs_mount": fs.get("mount_point"),
+	})
 
-st.title(T["title"])
-st.caption(T["caption"])
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
 
-time_label = st.sidebar.selectbox(
-    T["range"],
-    ["Last 15 minutes", "Last 1 hour", "Last 6 hours", "Last 24 hours"] if LANG=="en"
-    else ["15 phút gần nhất", "1 giờ gần nhất", "6 giờ gần nhất", "24 giờ gần nhất"],
-    index=1,
+#Streamlit layout
+st.set_page_config(
+    page_title= "Network Log Dashboard",
+    layout="wide"
 )
-gte = get_time_range_gte(time_label)
+
+st.title("Network Monitoring Dashboard")
+st.caption("Built with Streamlit +Elasticsearch")
+
+st.sidebar.header("Controls")
+
+dashboard_type = st.sidebar.radio(
+    "Select dashboard",
+    ["Syslog Logs", "Metrics (CPU/RAM/Disk)", "Network Devices (VyOS)"],
+    index=0
+)
+
+time_range = st.sidebar.selectbox(
+    "Time range",
+    ["Last 15 minutes", "Last 1 hour", "Last 6 hours", "Last 24 hours"],
+    index=1
+)
+
 st.sidebar.markdown("---")
 
-dash = st.sidebar.radio(
-    T["dashboard"],
-    [T["overview"], T["metric"]],
-    index=0,
-)
+#Syslog dashboard
+if dashboard_type == "Syslog Logs":
+    st.subheader("Syslog Events")
 
-refresh = st.sidebar.button(T["refresh"])
+    sev_options = {
+        "All severities": None,
+        "Only critical (0-3)": [0, 1, 2, 3],
+        "Warning and above (0-4)": [0, 1, 2, 3, 4],
+        "Notice and above (0-5)": [0, 1, 2, 3, 4, 5],
+    }
 
-# ========================
-# 6) DASHBOARD: OVERVIEW
-# ========================
-if dash == T["overview"]:
-    # KPI + Time series
-    ts_df = q_syslog_ts(gte, interval="5m")
-    if ts_df.empty:
-        st.warning(T["syslog_not_found"])
+    sev_label = st.sidebar.selectbox(
+        "Severity filter",
+        list(sev_options.keys()),
+        index=0
+    )
+    sev_codes = sev_options[sev_label]
+
+    message_query = st.sidebar.text_input(
+        "Search in message (optional)",
+        value=""
+    )
+
+    st.sidebar.markdown("---")
+    refresh = st.sidebar.button("Refresh data")
+
+    df = query_syslog(time_range, sev_codes)
+    if df.empty:
+        st.warning("No syslog events found for the selected range.")
     else:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.metric(T["kpi_total"], int(ts_df["count"].sum()))
-        with c2:
-            st.metric(T["kpi_max_5m"], int(ts_df["count"].max() or 0))
+        df = df[df["message"].str.contains(message_query, case=False, na=False)]
 
-        st.markdown(f"### {T['sys_count']}")
-        st.line_chart(ts_df.set_index("ts")["count"])
+    if df.empty:
+        st.info("No events match the message filter.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total events", len(df))
+        with col2:
+            error_count = (df["severity_code"] <= 3).sum()
+            st.metric("Error events (severity <= 3)", int(error_count))
+        with col3:
+            host_count = df["hostname"].nunique()
+            st.metric("Hosts with events", int (host_count))
 
-    # Severity distribution (bar/pie)
-    st.markdown(f"### {T['sev_dist']}")
-    chart_type = st.radio(T["sev_chart_type"], [T["bar"], T["pie"]], horizontal=True,
-                          index=0 if LANG=="en" else 0)
-    sev_df = q_severity_dist(gte)
-    if not sev_df.empty:
-        if chart_type == T["bar"]:
-            st.bar_chart(sev_df.set_index("severity")["count"])
+        st.markdown("### Event over time")
+        df_chart = df.copy()
+        df_chart["time_bucket"] = df_chart["timestamp"].dt.floor("1min")
+
+        chart_data = (
+            df_chart
+            .groupby(["time_bucket", "severity_name"])
+            .size()
+            .reset_index(name="count")
+	)
+
+        pivot = chart_data.pivot(
+            index="time_bucket",
+            columns="severity_name",
+            values="count"
+        ).fillna(0)
+
+        st.line_chart(pivot)
+        st.markdown("### Detailed syslog events")
+
+        host_filter = st.multiselect(
+            "Filter by hostname",
+            options=sorted(df["hostname"].dropna().unique()),
+            default=None
+	)
+
+        df_show = df.copy()
+        if host_filter:
+            df_show = df_show[df_show["hostname"].isin(host_filter)]
+
+        df_show = df_show.sort_values("timestamp", ascending=False)
+        df_show = df_show[
+            ["timestamp", "hostname", "host_ip",
+            "severity_code", "severity_name", "message"]
+        ]
+
+        st.dataframe(
+            df_show,
+            use_container_width=True,
+            height=500
+	)
+
+#Metrics dashboard
+elif dashboard_type == "Metrics (CPU/RAM/Disk)":
+    st.subheader("Host Metrics (CPU /Memory / Disk)")
+
+    dfm = query_metrics(time_range)
+    if dfm.empty:
+        st.warning("No metricbeat data found for the selected range.")
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            hosts = dfm["hostname"].nunique()
+            st.metric("Number of hosts", int(hosts))
+        with col2:
+            avg_cpu = dfm["cpu_pct"].mean() * 100 if dfm["cpu_pct"].notna().any() else None
+            st.metric("Average CPU usage (%)", f"{avg_cpu:.1f}"if avg_cpu is not None else "N/A")
+        with col3:
+            avg_mem = dfm["mem_used_pct"].mean() * 100 if dfm["mem_used_pct"].notna().any() else None
+            st.metric("Average Memory usage(%)", f"{avg_mem:.1f}" if avg_mem is not None else "N/A")
+        host_filter = st.multiselect(
+            "Filter by hostname",
+            options=sorted(dfm["hostname"].dropna().unique()),
+            default=None
+        )
+
+        dfm_show = dfm.copy()
+        if host_filter:
+            dfm_show = dfm_show[dfm_show["hostname"].isin(host_filter)]
+
+        if dfm_show.empty:
+            st.info("No metric match the selected host filter.")
         else:
-            fig = px.pie(sev_df, names="severity", values="count", hole=0.25)
-            st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info(T["syslog_not_found"])
+            st.markdown("### CPU Usage over time")
+            cpu_df = dfm_show[dfm_show["cpu_pct"].notna()].copy()
+            if not cpu_df.empty:
+                cpu_df["time_bucket"] = cpu_df["timestamp"].dt.floor("1min")
+                cpu_chart = (
+                    cpu_df
+                    .groupby(["time_bucket", "hostname"])["cpu_pct"]
+                    .mean()
+                    .reset_index()
+                )
+                pivot_cpu = cpu_chart.pivot(
+                    index="time_bucket",
+                    columns="hostname",
+                    values="cpu_pct"
+                )
+                st.line_chart(pivot_cpu)
+            else:
+                st.info("No CPU data available.")
+            st.markdown("### Memory usage over time")
+            mem_df = dfm_show[dfm_show["mem_used_pct"].notna()].copy()
+            if not mem_df.empty:
+                mem_df["time_bucket"] = mem_df["timestamp"].dt.floor("1min")
+                mem_chart = (
+                    mem_df
+                    .groupby(["time_bucket", "hostname"])["mem_used_pct"]
+                    .mean()
+                    .reset_index()
+                )
+                pivot_mem = mem_chart.pivot(
+                    index="time_bucket",
+                    columns="hostname",
+                    values="mem_used_pct"
+                )
+                st.line_chart(pivot_mem)
+            else:
+                st.info("No memory data available.")
+            st.markdown("### Disk usage(latest snapshot)")
 
-    # Top hosts by errors
-    st.markdown(f"### {T['top_err_hosts']}")
-    top_err = q_top_error_hosts(gte, size=10)
-    if not top_err.empty:
-        top_err = top_err.rename(columns={"count": T["col_cnt"], "hostname": T["col_host"]})
-        st.dataframe(top_err, use_container_width=True, height=300)
-    else:
-        st.info(T["syslog_not_found"])
+            disk_df = dfm_show[dfm_show["fs_used_pct"].notna()].copy()
+            if not disk_df.empty:
+                disk_df = disk_df.sort_values("timestamp").groupby(
+                    ["hostname", "fs_mount"], as_index=False
+                ).tail(1)
 
-    # Top source IP / hostname
-    c3, c4 = st.columns(2)
-    with c3:
-        st.markdown(f"#### {T['top_src_ip']}")
-        df_ip, df_hn = q_top_source_ip_and_hostname(gte, size=10)
-        if not df_ip.empty:
-            st.dataframe(df_ip.rename(columns={"count": T["col_cnt"], "host_ip": T["col_ip"]}),
-                         use_container_width=True, height=300)
+                disk_df["fs_used_pct"] = disk_df["fs_used_pct"] * 100
+                disk_df = disk_df[
+                    ["hostname", "host_ip", "fs_mount", "fs_used_pct"]
+                ].sort_values("fs_used_pct", ascending=False)
+
+                st.dataframe(
+                    disk_df,
+                    use_container_width=True,
+                    height=300
+                )
+            else:
+                st.info("No filesystem usage data available.")
+
+#VyOS dashboard
+elif dashboard_type == "Network Devices (VyOS)":
+    st.subheader("Network Device Logs (VyOS)")
+
+    keyword = st.sidebar.text_input(
+        "Hostname contains (for VyOS)",
+        value="vyos"
+    )
+
+    sev_label_vyos = st.sidebar.selectbox(
+        "Severity filter",
+        ["All severities", "Only errors (<= 3)", "Only warnings and above (<= 4"],
+        index=0
+    )
+    if sev_label_vyos == "All severities":
+        sev_codes_vyos = None
+    elif sev_label_vyos == "Only errors (<= 3)":
+        sev_codes_vyos = [0, 1, 2, 3]
+    else:
+        sev_codes_vyos = [0, 1, 2, 3, 4]
+
+    df_vyos = query_syslog(time_range, sev_codes_vyos)
+
+    if df_vyos.empty:
+        st.warning("No syslog events found for the selected range.")
+    else:
+        df_vyos = df_vyos[
+            df_vyos["hostname"].str.contains(keyword, case=False, na=False)
+        ]
+
+        if df_vyos.empty:
+            st.info(f"No events found for hostnames containing '{keyword}'.")
         else:
-            st.info(T["syslog_not_found"])
-    with c4:
-        st.markdown(f"#### {T['top_hostnames']}")
-        if not df_hn.empty:
-            st.dataframe(df_hn.rename(columns={"count": T["col_cnt"], "hostname": T["col_host"]}),
-                         use_container_width=True, height=300)
-        else:
-            st.info(T["syslog_not_found"])
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Total VyOS events", len(df_vyos))
+            with col2:
+                unique_hosts = df_vyos["hostname"].nunique()
+                st.metric("Number of VyOS hosts", int(unique_hosts))
 
-# ========================
-# 7) DASHBOARD: SYSTEM HEALTH
-# ========================
-if dash == T["metric"]:
-    st.markdown(f"### {T['cpu_mem_disk']}")
-    mdf = q_metric_raw(gte)
-    if mdf.empty:
-        st.warning(T["no_metric"])
-    else:
-        # Host filter
-        hosts = sorted([h for h in mdf["hostname"].dropna().unique()])
-        sel_hosts = st.multiselect(T["host_select"], options=hosts, default=hosts[: min(5, len(hosts))])
-        show = mdf if len(sel_hosts) == 0 else mdf[mdf["hostname"].isin(sel_hosts)]
-
-        # CPU chart
-        cpu_df = show[show["cpu_pct"].notna()].copy()
-        if not cpu_df.empty:
-            cpu_df["timestamp_floor"] = cpu_df["timestamp"].dt.floor("1min")
-            cpu_agg = (
-                cpu_df.groupby(["timestamp_floor", "hostname"])["cpu_pct"]
-                .mean()
-                .reset_index()
+            st.markdown("### Severity distribution")
+            sev_dist = (
+                df_vyos
+                .groupby("severity_name")
+                .size()
+                .reset_index(name="count")
+                .sort_values("count", ascending=False)
             )
-            cpu_agg["cpu_pct"] = cpu_agg["cpu_pct"] * 100
-            pivot_cpu = cpu_agg.pivot(index="timestamp_floor", columns="hostname", values="cpu_pct")
-            st.line_chart(pivot_cpu)
-        else:
-            st.info("No CPU data.")
-
-        # Memory chart
-        mem_df = show[show["mem_used_pct"].notna()].copy()
-        if not mem_df.empty:
-            mem_df["timestamp_floor"] = mem_df["timestamp"].dt.floor("1min")
-            mem_agg = (
-                mem_df.groupby(["timestamp_floor", "hostname"])["mem_used_pct"]
-                .mean()
-                .reset_index()
+            st.bar_chart(
+                data=sev_dist.set_index("severity_name")["count"]
             )
-            mem_agg["mem_used_pct"] = mem_agg["mem_used_pct"] * 100
-            pivot_mem = mem_agg.pivot(index="timestamp_floor", columns="hostname", values="mem_used_pct")
-            st.line_chart(pivot_mem)
-        else:
-            st.info("No memory data.")
 
-        # Disk snapshot table (latest per host, max across mounts)
-        st.markdown(f"### {T['status_table']}")
-        status = build_status_table(show)
-        if not status.empty:
-            status = status.rename(
-                columns={
-                    "timestamp": T["col_ts"],
-                    "hostname": T["col_host"],
-                    "host_ip": T["col_ip"],
-                    "cpu_pct": T["col_cpu"],
-                    "mem_used_pct": T["col_mem"],
-                    "disk_max_pct": T["col_disk"],
-                }
+            st.markdown("### VyOS events over time")
+            vyos_chart = df_vyos.copy()
+            vyos_chart["time_bucket"] = vyos_chart["timestamp"].dt.floor("1min")
+
+            vyos_chart_data = (
+                vyos_chart
+                .groupby(["time_bucket", "severity_name"])
+                .size()
+                .reset_index(name="count")
             )
-            # Sắp xếp theo CPU hoặc Mem giảm dần cho dễ nhìn
-            sort_cols = [T["col_cpu"], T["col_mem"], T["col_disk"]]
-            existing = [c for c in sort_cols if c in status.columns]
-            if existing:
-                status = status.sort_values(existing[0], ascending=False)
-            st.dataframe(status, use_container_width=True, height=420)
-        else:
-            st.info("No status rows.")
+
+            vyos_pivot = vyos_chart_data.pivot(
+                index= "time_bucket",
+                columns="severity_name",
+                values="count"
+            ).fillna(0)
+
+            st.line_chart(vyos_pivot)
+
+            st.markdown("### VyOs syslog events")
+            df_vyos_show = df_vyos.sort_values("timestamp", ascending=False)
+            df_vyos_show = df_vyos_show[
+                ["timestamp", "hostname", "host_ip",
+                "severity_code", "severity_name", "message"]
+            ]
+
+            st.dataframe(
+                df_vyos_show,
+                use_container_width=True,
+                height=500
+            )
