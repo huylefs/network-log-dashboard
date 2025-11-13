@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-from elasticsearch import Elasticsearch, ElasticsearchException
+from elasticsearch import Elasticsearch
 
 # =========================
 # Index names
@@ -741,10 +741,6 @@ def main():
         info = es.info()
         cluster_name = info.get("cluster_name", "unknown")
         st.sidebar.success(f"Connected to ES cluster: {cluster_name}")
-    except ElasticsearchException as e:
-        st.sidebar.error("Failed to connect to Elasticsearch.")
-        st.error(f"Elasticsearch error: {e}")
-        st.stop()
 
     time_from, time_to, time_label = sidebar_time_range()
     st.sidebar.markdown(f"**Current time range:** {time_label}")
