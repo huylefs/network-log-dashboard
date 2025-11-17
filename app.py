@@ -311,7 +311,20 @@ if dashboard_type == T["dash_syslog"]:
             ["timestamp", "hostname", "host_ip", "severity_code", "severity_name", "message"]
         ]
         st.dataframe(df_show, use_container_width=True, height=500)
+        st.markdown(f"### {T['sev_chart_type']}")
+        chart_kind = st.radio("", [T["bar"], T["pie"]], horizontal=True, label_visibility="collapsed")
 
+        sev_dist = (
+            df.groupby("severity_name")
+              .size().reset_index(name="count")
+              .sort_values("count", ascending=False)
+        )
+        if not sev_dist.empty:
+            if chart_kind == T["bar"]:
+                st.bar_chart(sev_dist.set_index("severity_name")["count"])
+            else:
+                fig = px.pie(sev_dist, names="severity_name", values="count", hole=0.25)
+                st.plotly_chart(fig, use_container_width=True)
 # ========================
 # 5) Metrics dashboard
 # ========================
