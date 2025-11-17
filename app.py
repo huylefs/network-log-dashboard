@@ -451,6 +451,37 @@ elif dashboard_type == T["dash_metrics"]:
             else:
                 st.info(T["no_disk"])
 
+            st.markdown(f"### {T['styled_status']}")
+            # Lấy snapshot mới nhất cho CPU/Mem và max Disk theo host (tương tự logic bạn đang dùng)
+            snap = []
+            for h in sorted(dfm_show["hostname"].dropna().unique()):
+                dsub = dfm_show[dfm_show["hostname"] == h].sort_values("timestamp")
+                cpu = dsub[dsub["cpu_pct"].notna()].tail(1)["cpu_pct"]
+                mem = dsub[dsub["mem_used_pct"].notna()].tail(1)["mem_used_pct"]
+                host_ip = dsub["host_ip"].dropna().iloc[0] if dsub["host_ip"].notna().any() else None
+                disk_max = dsub["fs_used_pct"].max()
+                snap.append({
+                    "hostname": h,
+                    "host_ip": host_ip,
+                    "CPU (%)": round(float(cpu.values[0])*100, 1) if len(cpu) else None,
+                    "Memory (%)": round(float(mem.values[0])*100, 1) if len(mem) else None,
+                    "Disk max (%)": round(float(disk_max)*100, 1) if pd.notna(disk_max) else None,
+                })
+            snap_df = pd.DataFrame(snap).sort_values(["CPU (%)","Memory (%)"], ascending=False)
+            
+            cw, mw, dw = st.columns(3)
+            with cw:
+                cpu_w = st.number_input(T["cpu_warn"], min_value=10, max_value=100, value=80, step=5)
+            with mw:
+                mem_w = st.number_input(T["mem_warn"], min_value=10, max_value=100, value=80, step=5)
+            with dw:
+                disk_w = st.number_input(T["disk_warn"], min_value=10, max_value=100, value=90, step=5)
+            
+            styled = snap_df.style.apply(lambda _df: style_status(_df, cpu_warn=cpu_w, mem_warn=mem_w, disk_warn=disk_w), axis=None)
+            st.dataframe(styled, use_container_width=True, height=380)
+            
+
+
 # ========================
 # 6) VyOS dashboard
 # ========================
