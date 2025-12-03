@@ -383,7 +383,7 @@ if dashboard_type == T["dash_status"]:
                     "1min")
 
                 # Biểu đồ CPU
-                st.markdown(f"### cpu_usage']}")
+                st.markdown(f"### 'cpu_usage']}")
                 cpu_data = dfm_chart.pivot_table(
                     index="time_bucket",
                     columns="hostname",
