@@ -309,64 +309,78 @@ if st.sidebar.button(T["refresh"]):
 # ========================
 # 4) Status Board (NEW)
 # ========================
+# ========================
+# 4) Status Board (UPDATED: Root Partition Only)
+# ========================
 if dashboard_type == T["dash_status"]:
     st.subheader(T["status_board"])
-    st.info(T["status_legend"])
+    st.info(T["status_legend"] + " (Mount point: /)")
 
-    dfm = query_metrics(time_range, size=2000)
+    # Lấy dữ liệu metric
+    dfm = query_metrics(time_range, size=3000)
     
     if dfm.empty:
         st.warning(T["no_metric_range"])
     else:
-        # Lấy bản ghi mới nhất của từng Host
-        latest_df = dfm.sort_values("timestamp").groupby("hostname").tail(1).copy()
-        
-        # Lấy thông tin Disk max usage của từng Host (vì 1 host có nhiều partition)
-        disk_max = dfm.groupby("hostname")["fs_used_pct"].max().reset_index()
-        disk_max.columns = ["hostname", "max_disk_usage"]
+        # 1. Lấy thông tin CPU/RAM mới nhất (bất kể mount point là gì)
+        # Sắp xếp theo thời gian và lấy dòng cuối cùng của mỗi host
+        latest_metrics = dfm.sort_values("timestamp").groupby("hostname").tail(1).copy()
+        latest_metrics = latest_metrics[["hostname", "host_ip", "timestamp", "cpu_pct", "mem_used_pct"]]
 
-        # Merge lại
-        final_view = pd.merge(latest_df, disk_max, on="hostname", how="left")
+        # 2. Lấy thông tin Disk chỉ của phân vùng "/" (Root)
+        # Lọc bản ghi có mount_point là "/"
+        df_disk_root = dfm[dfm["fs_mount"] == "/"].copy()
         
-        # Chọn các cột hiển thị
+        # Nếu tìm thấy dữ liệu đĩa root
+        if not df_disk_root.empty:
+            latest_disk = df_disk_root.sort_values("timestamp").groupby("hostname").tail(1)
+            latest_disk = latest_disk[["hostname", "fs_used_pct"]]
+            latest_disk.columns = ["hostname", "root_disk_usage"] # Đổi tên cột để merge
+        else:
+            # Trường hợp không có dữ liệu mount point "/" (ví dụ Windows hoặc path lạ)
+            latest_disk = pd.DataFrame(columns=["hostname", "root_disk_usage"])
+
+        # 3. Merge CPU/RAM với Disk theo Hostname
+        final_view = pd.merge(latest_metrics, latest_disk, on="hostname", how="left")
+        
+        # 4. Làm đẹp dữ liệu hiển thị
         display_df = final_view[[
             "hostname", "host_ip", "timestamp", 
-            "cpu_pct", "mem_used_pct", "max_disk_usage"
+            "cpu_pct", "mem_used_pct", "root_disk_usage"
         ]].copy()
 
-        # Chuyển đổi sang %
-        display_df["cpu_pct"] = (display_df["cpu_pct"] * 100).round(1)
-        display_df["mem_used_pct"] = (display_df["mem_used_pct"] * 100).round(1)
-        display_df["max_disk_usage"] = (display_df["max_disk_usage"] * 100).round(1)
+        # Chuyển đổi sang % và xử lý NaN (nếu host chưa gửi log đĩa)
+        display_df["cpu_pct"] = (display_df["cpu_pct"] * 100).fillna(0).round(1)
+        display_df["mem_used_pct"] = (display_df["mem_used_pct"] * 100).fillna(0).round(1)
+        display_df["root_disk_usage"] = (display_df["root_disk_usage"] * 100).fillna(0).round(1)
 
-        # Đổi tên cột cho đẹp
-        display_df.columns = ["Hostname", "IP", "Last Seen", "CPU %", "Mem %", "Max Disk %"]
+        display_df.columns = ["Hostname", "IP", "Last Seen", "CPU %", "Mem %", "Root Disk %"]
 
-        # Hàm tô màu
+        # 5. Hàm tô màu (Updated Logic)
         def style_status(row):
             cpu = row["CPU %"]
             mem = row["Mem %"]
-            disk = row["Max Disk %"]
+            disk = row["Root Disk %"]
             
             styles = [''] * len(row)
             
-            # CPU > 90% -> Red
-            if cpu > 90:
+            # Tô màu CPU
+            if cpu > 90: 
                 styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             
-            # Mem > 75% -> Red (YÊU CẦU CỦA USER)
-            if mem > 75:
+            # Tô màu RAM
+            if mem > 75: 
                 styles[4] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             
-            # Disk > 95% -> Red
-            if disk > 95:
+            # Tô màu Disk (Chỉ tính Root Partition)
+            if disk > 95: 
                 styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             
             return styles
 
         st.dataframe(
             display_df.style.apply(style_status, axis=1).format({
-                "Last Seen": lambda t: t.strftime("%Y-%m-%d %H:%M:%S")
+                "Last Seen": lambda t: t.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(t) else "N/A"
             }),
             use_container_width=True,
             height=600
