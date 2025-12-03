@@ -143,7 +143,7 @@ LANGS = {
 
         # SECURITY KEYS
         "sec_failed": "Đăng nhập thất bại (Failed)",
-        "sec_users": "Các Host có sự kiện bảo mật",
+        "sec_users": "Các Host có sự kiện đăng nhập thất bại",
     },
 }
 
