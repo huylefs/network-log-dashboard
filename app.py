@@ -317,51 +317,62 @@ if st.sidebar.button(T["refresh"]):
 # ========================
 if dashboard_type == T["dash_status"]:
     st.subheader(T["status_board"])
-    st.info(T["status_legend"] + " (Mount point: /)")
-    st.caption(f"Note: CPU & Memory are averaged over {time_range}. Disk is latest value.")
 
+
+    # Lấy dữ liệu metric
     dfm = query_metrics(time_range, size=3000)
     
     if dfm.empty:
         st.warning(T["no_metric_range"])
     else:
-        # --- PHẦN 1: BẢNG TRẠNG THÁI (TABLE) ---
+        # 1. Tính toán thống kê cho từng Host (CPU/RAM trung bình, Time mới nhất)
+        # Sử dụng aggregate để tính toán cùng lúc
         host_stats = dfm.groupby("hostname").agg({
-            "timestamp": "max",
-            "host_ip": "first",
-            "cpu_pct": "mean",
-            "mem_used_pct": "mean"
+            "timestamp": "max",            # Lấy thời gian cập nhật cuối cùng
+            "host_ip": "first",            # Lấy IP (giả sử IP ko đổi)
+            "cpu_pct": "mean",             # Lấy TRUNG BÌNH CPU
+            "mem_used_pct": "mean"         # Lấy TRUNG BÌNH RAM
         }).reset_index()
 
+        # 2. Lấy thông tin Disk chỉ của phân vùng "/" (Root) - Lấy giá trị MỚI NHẤT
         df_disk_root = dfm[dfm["fs_mount"] == "/"].copy()
+        
         if not df_disk_root.empty:
+            # Sắp xếp time tăng dần -> lấy cái cuối cùng của mỗi host
             latest_disk = df_disk_root.sort_values("timestamp").groupby("hostname").tail(1)
             latest_disk = latest_disk[["hostname", "fs_used_pct"]]
             latest_disk.columns = ["hostname", "root_disk_usage"]
         else:
             latest_disk = pd.DataFrame(columns=["hostname", "root_disk_usage"])
 
+        # 3. Merge dữ liệu thống kê với dữ liệu đĩa
         final_view = pd.merge(host_stats, latest_disk, on="hostname", how="left")
         
+        # 4. Làm đẹp dữ liệu hiển thị
         display_df = final_view[[
             "hostname", "host_ip", "timestamp", 
             "cpu_pct", "mem_used_pct", "root_disk_usage"
         ]].copy()
 
+        # Chuyển đổi sang %
         display_df["cpu_pct"] = (display_df["cpu_pct"] * 100).fillna(0).round(1)
         display_df["mem_used_pct"] = (display_df["mem_used_pct"] * 100).fillna(0).round(1)
         display_df["root_disk_usage"] = (display_df["root_disk_usage"] * 100).fillna(0).round(1)
 
         display_df.columns = ["Hostname", "IP", "Last Seen", "Avg CPU %", "Avg Mem %", "Root Disk %"]
 
+        # 5. Hàm tô màu (Logic giữ nguyên)
         def style_status(row):
             cpu = row["Avg CPU %"]
             mem = row["Avg Mem %"]
             disk = row["Root Disk %"]
+            
             styles = [''] * len(row)
-            if cpu > 90: styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            
+            if cpu > 75: styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             if mem > 75: styles[4] = 'background-color: #ffcccc; color: red; font-weight: bold;'
-            if disk > 95: styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            if disk > 75: styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            
             return styles
 
         st.dataframe(
@@ -369,37 +380,8 @@ if dashboard_type == T["dash_status"]:
                 "Last Seen": lambda t: t.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(t) else "N/A"
             }),
             use_container_width=True,
-            height=400
+            height=600
         )
-
-        # --- PHẦN 2: BIỂU ĐỒ XU HƯỚNG (CHARTS) ---
-        st.divider()
-        st.subheader(T["trends_header"])
-        
-        # Bộ lọc chọn Host để vẽ biểu đồ
-        all_hosts = sorted(dfm["hostname"].unique())
-        selected_hosts = st.multiselect(T["select_host_viz"], all_hosts, default=all_hosts)
-        
-        if selected_hosts:
-            # Lọc data theo host đã chọn
-            dfm_chart = dfm[dfm["hostname"].isin(selected_hosts)].copy()
-            
-            if not dfm_chart.empty:
-                # Resample dữ liệu theo phút để biểu đồ mượt hơn
-                dfm_chart["time_bucket"] = dfm_chart["timestamp"].dt.floor("1min")
-                
-                # Biểu đồ CPU
-                cpu_data = dfm_chart.pivot_table(index="time_bucket", columns="hostname", values="cpu_pct", aggfunc='mean') * 100
-                st.markdown("**CPU Usage (%)**")
-                st.line_chart(cpu_data)
-                
-                # Biểu đồ Memory
-                mem_data = dfm_chart.pivot_table(index="time_bucket", columns="hostname", values="mem_used_pct", aggfunc='mean') * 100
-                st.markdown("**Memory Usage (%)**")
-                st.line_chart(mem_data)
-        else:
-            st.info("Select at least one host to view trends.")
-
 # ========================
 # 5) Security Dashboard (NEW)
 # ========================
