@@ -42,9 +42,9 @@ LANGS = {
         "select_dashboard": "Select dashboard",
 
         # MENU ITEMS
-        "dash_status": "Inventory Status & Trends",
-        "dash_security": "Security Audit (SSH)",
-        "dash_syslog": "Syslog Explorer",
+        "dash_status": "Metrics",
+        "dash_security": "Security (SSH)",
+        "dash_syslog": "Syslog",
         "dash_vyos": "Network Devices (VyOS)",
 
         "time_range": "Time range",
@@ -99,8 +99,8 @@ LANGS = {
         "select_dashboard": "Chọn bảng điều khiển",
 
         # MENU ITEMS
-        "dash_status": "Trạng thái & Biểu đồ (Status)",
-        "dash_security": "Bảo mật (SSH/Auth)",
+        "dash_status": "Thông số",
+        "dash_security": "Bảo mật (SSH)",
         "dash_syslog": "Nhật ký Syslog",
         "dash_vyos": "Thiết bị mạng (VyOS)",
 
