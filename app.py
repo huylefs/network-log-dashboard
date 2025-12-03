@@ -18,7 +18,6 @@ ES_USER = st.secrets["ES_USER"]
 ES_PASS = st.secrets["ES_PASS"]
 ES_SCHEME = st.secrets.get("ES_SCHEME", "https")
 
-
 SYSLOG_INDEX = "syslog-*"
 METRIC_INDEX = "metricbeat-*"
 
@@ -70,7 +69,7 @@ LANGS = {
         "vyos_sev_filter": "Severity filter",
         "vyos_sev_all": "All severities",
         "vyos_sev_err": "Only errors (≤ 3)",
-        "vyos_sev_warn": "Only warnings and above (≤ 4)",
+        "vyos_sev_warn": "Warning and above (≤ 4)",
         "no_syslog_vyos_range": "No syslog events found for the selected range.",
         "no_vyos_host_msg": "No events found for hostnames containing",
         "vyos_total": "Total VyOS events",
@@ -84,11 +83,19 @@ LANGS = {
         "status_board": "System Health Status",
         "trends_header": "CPU & Memory",
         "select_host_viz": "Select hosts to visualize",
+        "cpu_usage": "CPU Usage (%)",
+        "mem_usage": "Memory Usage (%)",
+        "select_host_trend_info": "Select at least one host to view trends.",
 
         # SECURITY KEYS
         "sec_failed": "Failed Login Attempts",
         "sec_accepted": "Accepted Logins",
         "sec_users": "Top Hosts (Security Events)",
+        "sec_recent_failed": "Recent Failed Logins",
+        "sec_no_failed_detected": "No failed login attempts detected.",
+        "sec_top_hosts_failures": "Top Hosts with Failures",
+        "sec_no_hosts": "No hosts found.",
+        "sec_no_failed_data": "No failed login data.",
     },
     "vi": {
         "page_title": "Bảng điều khiển Log Mạng",
@@ -140,10 +147,19 @@ LANGS = {
         "status_board": "Bảng trạng thái sức khỏe hệ thống",
         "trends_header": "CPU & Bộ nhớ",
         "select_host_viz": "Chọn host để xem biểu đồ",
+        "cpu_usage": "Mức sử dụng CPU (%)",
+        "mem_usage": "Mức sử dụng bộ nhớ (%)",
+        "select_host_trend_info": "Chọn ít nhất một host để xem biểu đồ xu hướng.",
 
         # SECURITY KEYS
         "sec_failed": "Đăng nhập thất bại",
+        "sec_accepted": "Đăng nhập thành công",
         "sec_users": "Các Host đăng nhập thất bại",
+        "sec_recent_failed": "Các lần đăng nhập thất bại gần đây",
+        "sec_no_failed_detected": "Không phát hiện lần đăng nhập thất bại nào.",
+        "sec_top_hosts_failures": "Các host có số lần đăng nhập thất bại nhiều nhất",
+        "sec_no_hosts": "Không tìm thấy host nào.",
+        "sec_no_failed_data": "Không có dữ liệu đăng nhập thất bại.",
     },
 }
 
@@ -381,7 +397,7 @@ if dashboard_type == T["dash_status"]:
                     "1min")
 
                 # Biểu đồ CPU
-                st.markdown("**CPU Usage (%)**")
+                st.markdown(f"**{T['cpu_usage']}**")
                 cpu_data = dfm_chart.pivot_table(
                     index="time_bucket",
                     columns="hostname",
@@ -391,7 +407,7 @@ if dashboard_type == T["dash_status"]:
                 st.line_chart(cpu_data)
 
                 # Biểu đồ Memory
-                st.markdown("**Memory Usage (%)**")
+                st.markdown(f"**{T['mem_usage']}**")
                 mem_data = dfm_chart.pivot_table(
                     index="time_bucket",
                     columns="hostname",
@@ -400,12 +416,12 @@ if dashboard_type == T["dash_status"]:
                 ) * 100
                 st.line_chart(mem_data)
         else:
-            st.info("Select at least one host to view trends.")
+            st.info(T["select_host_trend_info"])
 
 # ========================
 # 5) Security Dashboard
 # ========================
-elif dashboard_type == T["dash_security"]:
+elif dashboard_type == T["dash_security"]]:
     st.subheader(T["dash_security"])
     dfs = query_syslog(time_range, size=1000)
 
@@ -422,12 +438,15 @@ elif dashboard_type == T["dash_security"]:
         col_main, col_chart = st.columns([2, 1])
 
         with col_main:
-            st.markdown("#### Recent Failed Logins")
+            st.markdown(f"#### {T['sec_recent_failed']}")
             if not df_fail.empty:
                 st.dataframe(
-                    df_fail[["timestamp", "hostname", "message"]], use_container_width=True, height=400)
+                    df_fail[["timestamp", "hostname", "message"]],
+                    use_container_width=True,
+                    height=400
+                )
             else:
-                st.success("No failed login attempts detected.")
+                st.success(T["sec_no_failed_detected"])
 
         with col_chart:
             st.markdown(f"#### {T['sec_users']}")
@@ -447,14 +466,14 @@ elif dashboard_type == T["dash_security"]:
                         x="Hostname",
                         y="Count",
                         color="Hostname",
-                        title="Top Hosts with Failures"
+                        title=T["sec_top_hosts_failures"]
                     )
                     fig.update_layout(showlegend=True)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.info("No hosts found.")
+                    st.info(T["sec_no_hosts"])
             else:
-                st.info("No failed login data.")
+                st.info(T["sec_no_failed_data"])
 
 # ========================
 # 6) Syslog Dashboard
