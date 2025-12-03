@@ -400,13 +400,11 @@ elif dashboard_type == T["dash_security"]:
     if dfs.empty:
         st.warning(T["no_syslog_range"])
     else:
-        # Lọc các log liên quan đến bảo mật
+        # Chỉ lọc log thất bại
         df_fail = dfs[dfs["message"].str.contains("authentication failure", case=False, na=False)]
-        df_success = dfs[dfs["message"].str.contains("session opened", case=False, na=False)]
 
-        c1, c2 = st.columns(2)
-        c1.metric(T["sec_failed"], len(df_fail), delta_color="inverse")
-        c2.metric(T["sec_accepted"], len(df_success))
+        # Hiển thị Metric duy nhất
+        st.metric(T["sec_failed"], len(df_fail), delta_color="inverse")
 
         col_main, col_chart = st.columns([2, 1])
 
@@ -420,11 +418,11 @@ elif dashboard_type == T["dash_security"]:
         with col_chart:
             st.markdown(f"#### {T['sec_users']}")
             
-            # Gộp Failed và Success để xem Host nào hoạt động mạnh nhất
-            df_interest = pd.concat([df_fail, df_success])
+            # Chỉ sử dụng dữ liệu Failed để vẽ biểu đồ Top Host
+            df_interest = df_fail.copy()
             
             if not df_interest.empty:
-                # Đếm trực tiếp hostname
+                # Đếm hostname bị lỗi nhiều nhất
                 host_counts = df_interest["hostname"].value_counts().reset_index()
                 host_counts.columns = ["Hostname", "Count"]
                 
@@ -433,15 +431,16 @@ elif dashboard_type == T["dash_security"]:
                         host_counts.head(10), 
                         x="Hostname", 
                         y="Count", 
-                        color="Hostname", # Mỗi host một màu
-                        text_auto=True
+                        color="Hostname",
+                        text_auto=True,
+                        title="Top Hosts with Failures"
                     )
                     fig.update_layout(showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No hosts found.")
             else:
-                st.info("No data.")
+                st.info("No failed login data.")
 
 # ========================
 # 6) Syslog Dashboard
