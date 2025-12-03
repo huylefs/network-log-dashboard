@@ -568,7 +568,9 @@ elif dashboard_type == T["dash_vyos"]:
         c1.metric(T["vyos_total"], len(dfv))
         c2.metric(T["vyos_hosts"], dfv["hostname"].nunique())
 
-        # Line Chart (Biểu đồ đường) nằm trên
+        st.divider()
+
+        # 1. Line Chart (Biểu đồ đường) nằm trên
         st.markdown(f"### {T['vyos_over_time']}")
         dfv["time_bucket"] = dfv["timestamp"].dt.floor("1min")
         chart = dfv.groupby(["time_bucket", "severity_name"]
@@ -576,7 +578,9 @@ elif dashboard_type == T["dash_vyos"]:
         st.line_chart(chart.pivot(index="time_bucket",
                       columns="severity_name", values="count").fillna(0))
 
-        # Pie Chart (Biểu đồ tròn) nằm dưới
+        st.divider()
+
+        # 2. Pie Chart (Biểu đồ tròn) nằm dưới
         st.markdown(f"### {T['sev_chart_type']}")
         sev_counts = dfv["severity_name"].value_counts().reset_index()
         sev_counts.columns = ["Severity", "Count"]
@@ -584,6 +588,9 @@ elif dashboard_type == T["dash_vyos"]:
         fig = px.pie(sev_counts, values="Count", names="Severity", hole=0.4)
         st.plotly_chart(fig, use_container_width=True)
 
+        st.divider()
+
+        # 3. Table Log
         st.dataframe(
             dfv[["timestamp", "hostname", "severity_name", "message"]
                 ].sort_values("timestamp", ascending=False),
