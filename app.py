@@ -42,7 +42,7 @@ LANGS = {
         "select_dashboard": "Select dashboard",
 
         # MENU ITEMS
-        "dash_status": "Metrics",
+        "dash_status": "System metrics",
         "dash_security": "Security (SSH)",
         "dash_syslog": "Syslog",
         "dash_vyos": "Network Devices (VyOS)",
@@ -61,7 +61,7 @@ LANGS = {
         "total_events": "Total events",
         "error_events": "Error events (severity ≤ 3)",
         "hosts_with_events": "Hosts with events",
-        "events_over_time": "Event over time",
+        "events_over_time": "Events over time",
         "detailed_syslog": "Detailed syslog events",
         "filter_by_host": "Filter by hostname",
         "no_metric_range": "No metricbeat data found for the selected range.",
@@ -448,7 +448,6 @@ elif dashboard_type == T["dash_security"]:
                         x="Hostname",
                         y="Count",
                         color="Hostname",
-                        text_auto=True,
                         title="Top Hosts with Failures"
                     )
                     fig.update_layout(showlegend=True)
