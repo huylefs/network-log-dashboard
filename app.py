@@ -447,57 +447,78 @@ elif dashboard_type == T["dash_security"]:
 # ========================
 elif dashboard_type == T["dash_syslog"]:
     st.subheader(T["dash_syslog"])
-    
+
+    # Global Severity Filter (Filter at Query Level)
     sev_opts = {
         T["sev_all"]: None,
         T["sev_crit"]: [0, 1, 2, 3],
         T["sev_warn"]: [0, 1, 2, 3, 4],
         T["sev_notice"]: [0, 1, 2, 3, 4, 5],
     }
-    sev_label = st.sidebar.selectbox(T["sev_filter"], list(sev_opts.keys()), index=0)
+    sev_label = st.sidebar.selectbox(
+        T["sev_filter"], list(sev_opts.keys()), index=0)
     sev_codes = sev_opts[sev_label]
     message_query = st.sidebar.text_input(T["search_msg"], value="")
 
     df = query_syslog(time_range, sev_codes)
-    
+
     if not df.empty and message_query:
-        df = df[df["message"].str.contains(message_query, case=False, na=False)]
+        df = df[df["message"].str.contains(
+            message_query, case=False, na=False)]
 
     if df.empty:
-        st.warning(T["no_syslog_range"] if not message_query else T["no_syslog_filter"])
+        st.warning(T["no_syslog_range"]
+                   if not message_query else T["no_syslog_filter"])
     else:
-        c1, c2, c3 = st.columns(3)
+        # Bỏ Host with events, chỉ giữ 2 metric
+        c1, c2 = st.columns(2)
         c1.metric(T["total_events"], len(df))
         c2.metric(T["error_events"], int((df["severity_code"] <= 3).sum()))
-        c3.metric(T["hosts_with_events"], df["hostname"].nunique())
 
-        # Update Layout to include Pie Chart next to Line Chart
-        col_trend, col_dist = st.columns([2, 1])
+        # Local Severity Name Filter (Multiselect)
+        all_sevs = sorted(df["severity_name"].dropna().unique())
+        selected_sevs = st.multiselect(
+            T["filter_by_sev"], options=all_sevs, default=all_sevs)
 
-        with col_trend:
-            st.markdown(f"### {T['events_over_time']}")
-            df_chart = df.copy()
+        # Apply local filter
+        df_filtered = df[df["severity_name"].isin(
+            selected_sevs)] if selected_sevs else df
+
+        # 1. Line Chart (Top)
+        st.markdown(f"### {T['events_over_time']}")
+        if not df_filtered.empty:
+            df_chart = df_filtered.copy()
             df_chart["time_bucket"] = df_chart["timestamp"].dt.floor("1min")
-            chart_data = df_chart.groupby(["time_bucket", "severity_name"]).size().reset_index(name="count")
-            st.line_chart(chart_data.pivot(index="time_bucket", columns="severity_name", values="count").fillna(0))
-        
-        with col_dist:
-            st.markdown(f"### {T['sev_chart_type']}")
-            if not df.empty:
-                sev_counts = df["severity_name"].value_counts().reset_index()
-                sev_counts.columns = ["Severity", "Count"]
-                fig = px.pie(sev_counts, values="Count", names="Severity", hole=0.4)
-                st.plotly_chart(fig, use_container_width=True)
+            chart_data = df_chart.groupby(
+                ["time_bucket", "severity_name"]).size().reset_index(name="count")
+            st.line_chart(chart_data.pivot(index="time_bucket",
+                          columns="severity_name", values="count").fillna(0))
+
+        # 2. Pie Chart (Bottom)
+        st.markdown(f"### {T['sev_chart_type']}")
+        if not df_filtered.empty:
+            sev_counts = df_filtered["severity_name"].value_counts(
+            ).reset_index()
+            sev_counts.columns = ["Severity", "Count"]
+            fig = px.pie(sev_counts, values="Count",
+                         names="Severity", hole=0.4)
+            st.plotly_chart(fig, use_container_width=True)
 
         st.markdown(f"### {T['detailed_syslog']}")
-        host_filter = st.multiselect(T["filter_by_host"], options=sorted(df["hostname"].dropna().unique()))
+        host_filter = st.multiselect(
+            T["filter_by_host"], options=sorted(df["hostname"].dropna().unique()))
+
+        # Filter Host based on current filtered data
+        df_final = df_filtered
         if host_filter:
-            df = df[df["hostname"].isin(host_filter)]
-        
+            df_final = df_final[df_final["hostname"].isin(host_filter)]
+
         st.dataframe(
-            df[["timestamp", "hostname", "severity_name", "message"]].sort_values("timestamp", ascending=False),
+            df_final[["timestamp", "hostname", "severity_name", "message"]].sort_values(
+                "timestamp", ascending=False),
             use_container_width=True, height=400
         )
+
 
 # ========================
 # 7) VyOS Dashboard
