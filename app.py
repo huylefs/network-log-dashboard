@@ -317,8 +317,7 @@ if st.sidebar.button(T["refresh"]):
 # ========================
 if dashboard_type == T["dash_status"]:
     st.subheader(T["status_board"])
-    st.info(T["status_legend"] + " (Mount point: /)")
-    st.caption(f"Note: CPU & Memory are averaged over {time_range}. Disk is latest value.")
+
 
     # Lấy dữ liệu metric
     dfm = query_metrics(time_range, size=3000)
@@ -370,9 +369,9 @@ if dashboard_type == T["dash_status"]:
             
             styles = [''] * len(row)
             
-            if cpu > 90: styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            if cpu > 75: styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             if mem > 75: styles[4] = 'background-color: #ffcccc; color: red; font-weight: bold;'
-            if disk > 95: styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            if disk > 75: styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             
             return styles
 
