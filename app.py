@@ -453,7 +453,6 @@ elif dashboard_type == T["dash_security"]:
                     )
                     
                     # Ẩn legend nếu muốn gọn, hoặc để nguyên
-                    fig.update_layout(showlegend=False)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No hosts found.")
