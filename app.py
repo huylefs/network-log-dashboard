@@ -82,7 +82,7 @@ LANGS = {
 
         # STATUS & TRENDS KEYS
         "status_board": "System Health Status",
-        "trends_header": "Performance Trends (CPU & Memory)",
+        "trends_header": "CPU & Memory",
         "select_host_viz": "Select hosts to visualize",
 
         # SECURITY KEYS
