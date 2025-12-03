@@ -312,8 +312,13 @@ if st.sidebar.button(T["refresh"]):
 # ========================
 # 4) Status Board (UPDATED: Root Partition Only)
 # ========================
+# ========================
+# 4) Status Board (UPDATED: Avg CPU/Mem + Root Disk)
+# ========================
 if dashboard_type == T["dash_status"]:
     st.subheader(T["status_board"])
+    st.info(T["status_legend"] + " (Mount point: /)")
+    st.caption(f"Note: CPU & Memory are averaged over {time_range}. Disk is latest value.")
 
     # Lấy dữ liệu metric
     dfm = query_metrics(time_range, size=3000)
@@ -321,26 +326,28 @@ if dashboard_type == T["dash_status"]:
     if dfm.empty:
         st.warning(T["no_metric_range"])
     else:
-        # 1. Lấy thông tin CPU/RAM mới nhất (bất kể mount point là gì)
-        # Sắp xếp theo thời gian và lấy dòng cuối cùng của mỗi host
-        latest_metrics = dfm.sort_values("timestamp").groupby("hostname").tail(1).copy()
-        latest_metrics = latest_metrics[["hostname", "host_ip", "timestamp", "cpu_pct", "mem_used_pct"]]
+        # 1. Tính toán thống kê cho từng Host (CPU/RAM trung bình, Time mới nhất)
+        # Sử dụng aggregate để tính toán cùng lúc
+        host_stats = dfm.groupby("hostname").agg({
+            "timestamp": "max",            # Lấy thời gian cập nhật cuối cùng
+            "host_ip": "first",            # Lấy IP (giả sử IP ko đổi)
+            "cpu_pct": "mean",             # Lấy TRUNG BÌNH CPU
+            "mem_used_pct": "mean"         # Lấy TRUNG BÌNH RAM
+        }).reset_index()
 
-        # 2. Lấy thông tin Disk chỉ của phân vùng "/" (Root)
-        # Lọc bản ghi có mount_point là "/"
+        # 2. Lấy thông tin Disk chỉ của phân vùng "/" (Root) - Lấy giá trị MỚI NHẤT
         df_disk_root = dfm[dfm["fs_mount"] == "/"].copy()
         
-        # Nếu tìm thấy dữ liệu đĩa root
         if not df_disk_root.empty:
+            # Sắp xếp time tăng dần -> lấy cái cuối cùng của mỗi host
             latest_disk = df_disk_root.sort_values("timestamp").groupby("hostname").tail(1)
             latest_disk = latest_disk[["hostname", "fs_used_pct"]]
-            latest_disk.columns = ["hostname", "root_disk_usage"] # Đổi tên cột để merge
+            latest_disk.columns = ["hostname", "root_disk_usage"]
         else:
-            # Trường hợp không có dữ liệu mount point "/" (ví dụ Windows hoặc path lạ)
             latest_disk = pd.DataFrame(columns=["hostname", "root_disk_usage"])
 
-        # 3. Merge CPU/RAM với Disk theo Hostname
-        final_view = pd.merge(latest_metrics, latest_disk, on="hostname", how="left")
+        # 3. Merge dữ liệu thống kê với dữ liệu đĩa
+        final_view = pd.merge(host_stats, latest_disk, on="hostname", how="left")
         
         # 4. Làm đẹp dữ liệu hiển thị
         display_df = final_view[[
@@ -348,32 +355,24 @@ if dashboard_type == T["dash_status"]:
             "cpu_pct", "mem_used_pct", "root_disk_usage"
         ]].copy()
 
-        # Chuyển đổi sang % và xử lý NaN (nếu host chưa gửi log đĩa)
+        # Chuyển đổi sang %
         display_df["cpu_pct"] = (display_df["cpu_pct"] * 100).fillna(0).round(1)
         display_df["mem_used_pct"] = (display_df["mem_used_pct"] * 100).fillna(0).round(1)
         display_df["root_disk_usage"] = (display_df["root_disk_usage"] * 100).fillna(0).round(1)
 
-        display_df.columns = ["Hostname", "IP", "Last Seen", "CPU %", "Mem %", "Root Disk %"]
+        display_df.columns = ["Hostname", "IP", "Last Seen", "Avg CPU %", "Avg Mem %", "Root Disk %"]
 
-        # 5. Hàm tô màu (Updated Logic)
+        # 5. Hàm tô màu (Logic giữ nguyên)
         def style_status(row):
-            cpu = row["CPU %"]
-            mem = row["Mem %"]
+            cpu = row["Avg CPU %"]
+            mem = row["Avg Mem %"]
             disk = row["Root Disk %"]
             
             styles = [''] * len(row)
             
-            # Tô màu CPU
-            if cpu > 90: 
-                styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
-            
-            # Tô màu RAM
-            if mem > 75: 
-                styles[4] = 'background-color: #ffcccc; color: red; font-weight: bold;'
-            
-            # Tô màu Disk (Chỉ tính Root Partition)
-            if disk > 95: 
-                styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            if cpu > 90: styles[3] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            if mem > 75: styles[4] = 'background-color: #ffcccc; color: red; font-weight: bold;'
+            if disk > 95: styles[5] = 'background-color: #ffcccc; color: red; font-weight: bold;'
             
             return styles
 
