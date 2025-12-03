@@ -472,11 +472,23 @@ elif dashboard_type == T["dash_syslog"]:
         c2.metric(T["error_events"], int((df["severity_code"] <= 3).sum()))
         c3.metric(T["hosts_with_events"], df["hostname"].nunique())
 
-        st.markdown(f"### {T['events_over_time']}")
-        df_chart = df.copy()
-        df_chart["time_bucket"] = df_chart["timestamp"].dt.floor("1min")
-        chart_data = df_chart.groupby(["time_bucket", "severity_name"]).size().reset_index(name="count")
-        st.line_chart(chart_data.pivot(index="time_bucket", columns="severity_name", values="count").fillna(0))
+        # Update Layout to include Pie Chart next to Line Chart
+        col_trend, col_dist = st.columns([2, 1])
+
+        with col_trend:
+            st.markdown(f"### {T['events_over_time']}")
+            df_chart = df.copy()
+            df_chart["time_bucket"] = df_chart["timestamp"].dt.floor("1min")
+            chart_data = df_chart.groupby(["time_bucket", "severity_name"]).size().reset_index(name="count")
+            st.line_chart(chart_data.pivot(index="time_bucket", columns="severity_name", values="count").fillna(0))
+        
+        with col_dist:
+            st.markdown(f"### {T['sev_chart_type']}")
+            if not df.empty:
+                sev_counts = df["severity_name"].value_counts().reset_index()
+                sev_counts.columns = ["Severity", "Count"]
+                fig = px.pie(sev_counts, values="Count", names="Severity", hole=0.4)
+                st.plotly_chart(fig, use_container_width=True)
 
         st.markdown(f"### {T['detailed_syslog']}")
         host_filter = st.multiselect(T["filter_by_host"], options=sorted(df["hostname"].dropna().unique()))
