@@ -18,7 +18,7 @@ try:
     ES_PASS = st.secrets["ES_PASS"]
     ES_SCHEME = st.secrets.get("ES_SCHEME", "https")
 except Exception:
-    # Fallback cho local testing
+    # Fallback cho local testing (nếu không có secrets.toml)
     ES_HOST = "localhost"
     ES_PORT = 9200
     ES_USER = "elastic"
@@ -28,6 +28,7 @@ except Exception:
 SYSLOG_INDEX = "syslog-*"
 METRIC_INDEX = "metricbeat-*"
 
+# Khởi tạo kết nối Elasticsearch
 es = Elasticsearch(
     hosts=[{"host": ES_HOST, "port": ES_PORT, "scheme": ES_SCHEME}],
     basic_auth=(ES_USER, ES_PASS),
@@ -45,11 +46,11 @@ LANGS = {
         "caption": "Built with Streamlit + Elasticsearch",
         "controls": "Controls",
         "select_dashboard": "Select dashboard",
+        
         # MENU ITEMS
         "dash_status": "Inventory Status & Trends",
         "dash_security": "Security Audit (SSH)",
         "dash_syslog": "Syslog Explorer",
-        "dash_metrics": "Raw Metrics",
         "dash_vyos": "Network Devices (VyOS)",
         
         "time_range": "Time range",
@@ -69,16 +70,7 @@ LANGS = {
         "events_over_time": "Event over time",
         "detailed_syslog": "Detailed syslog events",
         "filter_by_host": "Filter by hostname",
-        "metrics_header": "Host Metrics (CPU / Memory / Disk)",
         "no_metric_range": "No metricbeat data found for the selected range.",
-        "num_hosts": "Number of hosts",
-        "avg_cpu": "Average CPU usage (%)",
-        "avg_mem": "Average Memory usage (%)",
-        "no_cpu": "No CPU data available.",
-        "mem_over_time": "Memory usage over time",
-        "no_mem": "No memory data available.",
-        "disk_latest": "Disk usage (latest snapshot)",
-        "no_disk": "No filesystem usage data available.",
         "vyos_header": "Network Device Logs (VyOS)",
         "vyos_host_contains": "Hostname contains (for VyOS)",
         "vyos_sev_filter": "Severity filter",
@@ -89,10 +81,7 @@ LANGS = {
         "no_vyos_host_msg": "No events found for hostnames containing",
         "vyos_total": "Total VyOS events",
         "vyos_hosts": "Number of VyOS hosts",
-        "sev_dist": "Severity distribution",
         "vyos_over_time": "VyOS events over time",
-        "vyos_detail": "VyOS syslog events",
-        "auto_refresh": "Auto refresh",
         "sev_chart_type": "Severity chart",
         "pie": "Pie",
         "bar": "Bar",
@@ -114,11 +103,11 @@ LANGS = {
         "caption": "Xây dựng bằng Streamlit + Elasticsearch",
         "controls": "Điều khiển",
         "select_dashboard": "Chọn bảng điều khiển",
+        
         # MENU ITEMS
         "dash_status": "Trạng thái & Biểu đồ (Status)",
         "dash_security": "Bảo mật (SSH/Auth)",
         "dash_syslog": "Nhật ký Syslog",
-        "dash_metrics": "Chỉ số (CPU/RAM/Disk)",
         "dash_vyos": "Thiết bị mạng (VyOS)",
         
         "time_range": "Khoảng thời gian",
@@ -138,16 +127,7 @@ LANGS = {
         "events_over_time": "Số lượng sự kiện theo thời gian",
         "detailed_syslog": "Danh sách sự kiện syslog",
         "filter_by_host": "Lọc theo hostname",
-        "metrics_header": "Chỉ số máy (CPU / Bộ nhớ / Đĩa)",
         "no_metric_range": "Không có dữ liệu metricbeat trong khoảng thời gian đã chọn.",
-        "num_hosts": "Số lượng host",
-        "avg_cpu": "CPU trung bình (%)",
-        "avg_mem": "Bộ nhớ trung bình (%)",
-        "no_cpu": "Không có dữ liệu CPU.",
-        "mem_over_time": "Bộ nhớ theo thời gian",
-        "no_mem": "Không có dữ liệu bộ nhớ.",
-        "disk_latest": "Dung lượng đĩa (snapshot mới nhất)",
-        "no_disk": "Không có dữ liệu dung lượng đĩa.",
         "vyos_header": "Nhật ký thiết bị mạng (VyOS)",
         "vyos_host_contains": "Hostname chứa (cho VyOS)",
         "vyos_sev_filter": "Lọc mức độ nghiêm trọng",
@@ -158,10 +138,7 @@ LANGS = {
         "no_vyos_host_msg": "Không có sự kiện cho hostname chứa",
         "vyos_total": "Tổng sự kiện VyOS",
         "vyos_hosts": "Số lượng host VyOS",
-        "sev_dist": "Phân bố mức độ nghiêm trọng",
         "vyos_over_time": "Sự kiện VyOS theo thời gian",
-        "vyos_detail": "Danh sách syslog của VyOS",
-        "auto_refresh": "Tự động tải lại",
         "sev_chart_type": "Kiểu biểu đồ Severity",
         "pie": "Tròn (Pie)",
         "bar": "Cột (Bar)",
@@ -234,6 +211,7 @@ def query_syslog(time_range_label: str, severity_codes=None, size: int = 1000) -
     return df
 
 def query_metrics(time_range_label: str, size: int = 2000) -> pd.DataFrame:
+    # Hàm này vẫn cần thiết để lấy dữ liệu cho Dashboard Status
     gte = get_time_range_gte(time_range_label)
     body = {
         "size": size,
@@ -287,14 +265,13 @@ T = LANGS[LANG]
 st.title(T["title"])
 st.caption(T["caption"])
 
-# Chọn Dashboard - Đã bỏ Host Details
+# Chọn Dashboard - Đã loại bỏ "Raw Metrics" và "Host Details"
 dashboard_type = st.sidebar.radio(
     T["select_dashboard"],
     [
         T["dash_status"],       # Enhanced: Table + Charts
         T["dash_security"],
         T["dash_syslog"], 
-        T["dash_metrics"], 
         T["dash_vyos"]
     ],
     index=0,
@@ -512,51 +489,7 @@ elif dashboard_type == T["dash_syslog"]:
         )
 
 # ========================
-# 7) Metrics Dashboard
-# ========================
-elif dashboard_type == T["dash_metrics"]:
-    st.subheader(T["metrics_header"])
-    dfm = query_metrics(time_range)
-
-    if dfm.empty:
-        st.warning(T["no_metric_range"])
-    else:
-        c1, c2, c3 = st.columns(3)
-        c1.metric(T["num_hosts"], dfm["hostname"].nunique())
-        
-        avg_cpu = dfm["cpu_pct"].mean() * 100 if dfm["cpu_pct"].notna().any() else 0
-        c2.metric(T["avg_cpu"], f"{avg_cpu:.1f}")
-        
-        avg_mem = dfm["mem_used_pct"].mean() * 100 if dfm["mem_used_pct"].notna().any() else 0
-        c3.metric(T["avg_mem"], f"{avg_mem:.1f}")
-
-        host_filter = st.multiselect(T["filter_by_host"], options=sorted(dfm["hostname"].dropna().unique()))
-        if host_filter:
-            dfm = dfm[dfm["hostname"].isin(host_filter)]
-
-        st.markdown("### CPU (%)")
-        if not dfm.empty:
-            dfm["time_bucket"] = dfm["timestamp"].dt.floor("1min")
-            
-            cpu_pivot = dfm.groupby(["time_bucket", "hostname"])["cpu_pct"].mean().reset_index()
-            st.line_chart(cpu_pivot.pivot(index="time_bucket", columns="hostname", values="cpu_pct"))
-
-            st.markdown(f"### {T['mem_over_time']}")
-            mem_pivot = dfm.groupby(["time_bucket", "hostname"])["mem_used_pct"].mean().reset_index()
-            st.line_chart(mem_pivot.pivot(index="time_bucket", columns="hostname", values="mem_used_pct"))
-
-            st.markdown(f"### {T['disk_latest']}")
-            disk_df = dfm[dfm["fs_used_pct"].notna()].sort_values("timestamp")
-            disk_latest = disk_df.groupby(["hostname", "fs_mount"]).tail(1).copy()
-            disk_latest["fs_used_pct"] = (disk_latest["fs_used_pct"] * 100).round(1)
-            
-            st.dataframe(
-                disk_latest[["hostname", "fs_mount", "fs_used_pct"]].sort_values("fs_used_pct", ascending=False),
-                use_container_width=True
-            )
-
-# ========================
-# 8) VyOS Dashboard
+# 7) VyOS Dashboard
 # ========================
 elif dashboard_type == T["dash_vyos"]:
     st.subheader(T["vyos_header"])
