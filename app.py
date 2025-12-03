@@ -506,6 +506,9 @@ elif dashboard_type == T["dash_vyos"]:
     st.subheader(T["vyos_header"])
     
     keyword = st.sidebar.text_input(T["vyos_host_contains"], value="vyos")
+    # Thêm ô tìm kiếm nội dung message
+    message_query = st.sidebar.text_input(T["search_msg"], value="")
+    
     sev_mode = st.sidebar.selectbox(T["vyos_sev_filter"], [T["vyos_sev_all"], T["vyos_sev_err"], T["vyos_sev_warn"]])
     
     sev_codes = None
@@ -514,10 +517,14 @@ elif dashboard_type == T["dash_vyos"]:
 
     dfv = query_syslog(time_range, sev_codes)
     if not dfv.empty:
+        # Lọc theo Hostname
         dfv = dfv[dfv["hostname"].str.contains(keyword, case=False, na=False)]
+        # Lọc theo Message (nếu có nhập)
+        if message_query:
+            dfv = dfv[dfv["message"].str.contains(message_query, case=False, na=False)]
 
     if dfv.empty:
-        st.info(f"{T['no_vyos_host_msg']} '{keyword}'")
+        st.info(f"{T['no_vyos_host_msg']} '{keyword}'" + (f" & message '{message_query}'" if message_query else ""))
     else:
         c1, c2 = st.columns(2)
         c1.metric(T["vyos_total"], len(dfv))
