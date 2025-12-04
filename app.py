@@ -488,7 +488,7 @@ elif dashboard_type == T["dash_syslog"]:
                 T["filter_by_host"],
                 options=available_hosts,
                 default=[],
-                placeholder="Chọn host (bỏ trống để xem tất cả)..."
+                placeholder="Choose host"
             )
         else:
             st.info("Không có dữ liệu.")
