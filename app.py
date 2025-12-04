@@ -76,6 +76,7 @@ LANGS = {
         "sev_chart_type": "Severity chart",
         "pie": "Pie",
         "bar": "Bar",
+        "filter_by_sev": "Filter by Severity Name",
 
         # STATUS & TRENDS KEYS
         "status_board": "System Health Status",
@@ -140,6 +141,7 @@ LANGS = {
         "sev_chart_type": "Sự kiện theo mức Severity",
         "pie": "Tròn (Pie)",
         "bar": "Cột (Bar)",
+        "filter_by_sev": "Lọc theo tên mức độ (Severity)",
 
         # STATUS & TRENDS KEYS
         "status_board": "Bảng trạng thái sức khỏe hệ thống",
