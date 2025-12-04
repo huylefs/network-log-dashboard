@@ -449,11 +449,14 @@ elif dashboard_type == T["dash_security"]:
 # ========================
 # 6) Syslog Dashboard
 # ========================
+# ========================
+# 6) Syslog Dashboard
+# ========================
 elif dashboard_type == T["dash_syslog"]:
     st.subheader(T["dash_syslog"])
 
-    # --- SIDEBAR CONTROLS ---
-    # 1. Severity Filter
+    # --- 1. PREPARE DATA ---
+    # Giữ bộ lọc Severity ở Sidebar để không chiếm chỗ nội dung chính
     sev_opts = {
         T["sev_all"]: None,
         T["sev_crit"]: [0, 1, 2, 3],
@@ -464,54 +467,62 @@ elif dashboard_type == T["dash_syslog"]:
         T["sev_filter"], list(sev_opts.keys()), index=0)
     sev_codes = sev_opts[sev_label]
 
-    # 2. Message Filter
-    message_query = st.sidebar.text_input(T["search_msg"], value="")
-
-    # --- QUERY DATA ---
+    # Query dữ liệu gốc trước (để lấy danh sách host cho bộ lọc)
     df = query_syslog(time_range, sev_codes)
 
-    # --- APPLY FILTERS ---
-    # Filter by Message
-    if not df.empty and message_query:
-        df = df[df["message"].str.contains(
-            message_query, case=False, na=False)]
-    
-    # [NEW] Filter by Hostname (Move to Sidebar)
+    # --- 2. MAIN CONTENT FILTERS (FILTER AREA) ---
+    # Tạo container để gom nhóm các bộ lọc
+    with st.container():
+        c_filter_1, c_filter_2 = st.columns([1, 1])
+        
+        with c_filter_1:
+            # [NEW] Lọc Hostname nằm ngay trong trang
+            if not df.empty:
+                available_hosts = sorted(df["hostname"].dropna().unique())
+                selected_hosts = st.multiselect(
+                    T["filter_by_host"], 
+                    options=available_hosts,
+                    default=[],
+                    placeholder="Chọn host..."
+                )
+            else:
+                selected_hosts = []
+                st.info("Không có dữ liệu host.")
+
+        with c_filter_2:
+            # Chuyển phần tìm kiếm Message vào đây luôn cho tiện
+            message_query = st.text_input(T["search_msg"], value="")
+
+    # --- 3. APPLY FILTERS ---
     if not df.empty:
-        # Lấy danh sách host hiện có trong dữ liệu đã query
-        available_hosts = sorted(df["hostname"].dropna().unique())
-        
-        # Tạo Multiselect ở Sidebar
-        selected_hosts = st.sidebar.multiselect(
-            T["filter_by_host"], 
-            options=available_hosts,
-            default=[] # Mặc định không chọn gì là chọn tất cả
-        )
-        
-        # Áp dụng filter nếu người dùng có chọn host
+        # Lọc theo Hostname đã chọn ở trên
         if selected_hosts:
             df = df[df["hostname"].isin(selected_hosts)]
+        
+        # Lọc theo Message
+        if message_query:
+            df = df[df["message"].str.contains(message_query, case=False, na=False)]
 
-    # --- DISPLAY ---
+    # --- 4. DISPLAY CHARTS & METRICS ---
+    st.markdown("---") # Đường kẻ phân cách giữa bộ lọc và dữ liệu
+
     if df.empty:
-        st.warning(T["no_syslog_range"]
-                   if not message_query else T["no_syslog_filter"])
+        st.warning(T["no_syslog_range"] if not message_query else T["no_syslog_filter"])
     else:
         # Metrics: Total & Error
         c1, c2 = st.columns(2)
         c1.metric(T["total_events"], len(df))
         c2.metric(T["error_events"], int((df["severity_code"] <= 3).sum()))
 
-        # Local Severity Name Filter (Chart only)
+        # Chart Filters (Bộ lọc hiển thị riêng cho biểu đồ)
         all_sevs = sorted(df["severity_name"].dropna().unique())
         selected_sevs = st.multiselect(
             T["filter_by_sev"], options=all_sevs, default=all_sevs)
 
         # Apply local filter for charts
-        df_filtered = df[df["severity_name"].isin(
-            selected_sevs)] if selected_sevs else df
+        df_filtered = df[df["severity_name"].isin(selected_sevs)] if selected_sevs else df
 
-        # 1. Line Chart (Event over time)
+        # 1. Line Chart
         st.markdown(f"### {T['events_over_time']}")
         if not df_filtered.empty:
             df_chart = df_filtered.copy()
@@ -521,20 +532,16 @@ elif dashboard_type == T["dash_syslog"]:
             st.line_chart(chart_data.pivot(index="time_bucket",
                           columns="severity_name", values="count").fillna(0))
 
-        # 2. Pie Chart (Severity Distribution)
+        # 2. Pie Chart
         st.markdown(f"### {T['sev_chart_type']}")
         if not df_filtered.empty:
-            sev_counts = df_filtered["severity_name"].value_counts(
-            ).reset_index()
+            sev_counts = df_filtered["severity_name"].value_counts().reset_index()
             sev_counts.columns = ["Severity", "Count"]
-            fig = px.pie(sev_counts, values="Count",
-                         names="Severity", hole=0.4)
+            fig = px.pie(sev_counts, values="Count", names="Severity", hole=0.4)
             st.plotly_chart(fig, use_container_width=True)
 
-        # 3. Detailed Table
+        # 3. Table
         st.markdown(f"### {T['detailed_syslog']}")
-        # (Đã bỏ phần filter host cũ ở đây vì đã chuyển lên sidebar)
-        
         st.dataframe(
             df_filtered[["timestamp", "hostname", "severity_name", "message"]].sort_values(
                 "timestamp", ascending=False),
