@@ -5,8 +5,6 @@ from elasticsearch import Elasticsearch
 import time
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
-import re
 
 # ========================
 # 0) Elasticsearch config
@@ -374,7 +372,7 @@ if dashboard_type == T["dash_status"]:
                 dfm_chart["time_bucket"] = dfm_chart["timestamp"].dt.floor("1min")
                 
                 # Biểu đồ CPU
-                st.markdown("**CPU Usage (%)**")
+                st.markdown(f"**{T['cpu_usage']}**")
                 cpu_data = dfm_chart.pivot_table(
                     index="time_bucket", 
                     columns="hostname", 
@@ -384,7 +382,7 @@ if dashboard_type == T["dash_status"]:
                 st.line_chart(cpu_data)
                 
                 # Biểu đồ Memory
-                st.markdown("**Memory Usage (%)**")
+                st.markdown(f"**{T['mem_usage']}**")
                 mem_data = dfm_chart.pivot_table(
                     index="time_bucket", 
                     columns="hostname", 
@@ -414,7 +412,7 @@ elif dashboard_type == T["dash_security"]:
         col_main, col_chart = st.columns([2, 1])
 
         with col_main:
-            st.markdown("#### Recent Failed Logins")
+            st.markdown(f"#### {T['sec_recent_failed']}")
             if not df_fail.empty:
                 st.dataframe(df_fail[["timestamp", "hostname", "message"]], use_container_width=True, height=400)
             else:
