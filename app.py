@@ -564,64 +564,64 @@ def get_syslog_chart_data_agg(time_range_label: str):
 # ==========================================
 # VÍ DỤ 2: Thay thế biểu đồ CPU Trends
 # ==========================================
-def get_cpu_trends_agg(time_range_label: str, selected_hosts: list = None):
-    """
-    Tính trung bình CPU theo thời gian cho từng Host sử dụng Aggregation.
-    """
-    gte = get_time_range_gte(time_range_label)
+    def get_cpu_trends_agg(time_range_label: str, selected_hosts: list = None):
+        """
+        Tính trung bình CPU theo thời gian cho từng Host sử dụng Aggregation.
+        """
+        gte = get_time_range_gte(time_range_label)
+        
+        # Xây dựng bộ lọc host
+        filters = [{"range": {"@timestamp": {"gte": gte, "lte": "now"}}}]
+        if selected_hosts:
+            filters.append({"terms": {"host.hostname": selected_hosts}})
     
-    # Xây dựng bộ lọc host
-    filters = [{"range": {"@timestamp": {"gte": gte, "lte": "now"}}}]
-    if selected_hosts:
-        filters.append({"terms": {"host.hostname": selected_hosts}})
-
-    body = {
-        "size": 0, # Size = 0 để tối ưu tốc độ
-        "query": {"bool": {"filter": filters}},
-        "aggs": {
-            # 1. Chia theo thời gian
-            "cpu_over_time": {
-                "date_histogram": {
-                    "field": "@timestamp",
-                    "fixed_interval": "1m" # Hoặc "5m" nếu khoảng thời gian dài
-                },
-                "aggs": {
-                    # 2. Chia theo Hostname
-                    "by_host": {
-                        "terms": {"field": "host.hostname", "size": 20}, # Top 20 host
-                        "aggs": {
-                            # 3. Tính trung bình CPU (Metric Aggregation)
-                            "avg_cpu": {
-                                "avg": {"field": "system.cpu.total.norm.pct"}
+        body = {
+            "size": 0, # Size = 0 để tối ưu tốc độ
+            "query": {"bool": {"filter": filters}},
+            "aggs": {
+                # 1. Chia theo thời gian
+                "cpu_over_time": {
+                    "date_histogram": {
+                        "field": "@timestamp",
+                        "fixed_interval": "1m" # Hoặc "5m" nếu khoảng thời gian dài
+                    },
+                    "aggs": {
+                        # 2. Chia theo Hostname
+                        "by_host": {
+                            "terms": {"field": "host.hostname", "size": 20}, # Top 20 host
+                            "aggs": {
+                                # 3. Tính trung bình CPU (Metric Aggregation)
+                                "avg_cpu": {
+                                    "avg": {"field": "system.cpu.total.norm.pct"}
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    res = es.search(index=METRIC_INDEX, body=body)
     
-    # Parsing
-    buckets = res["aggregations"]["cpu_over_time"]["buckets"]
-    data = []
+        res = es.search(index=METRIC_INDEX, body=body)
+        
+        # Parsing
+        buckets = res["aggregations"]["cpu_over_time"]["buckets"]
+        data = []
+        
+        for bucket in buckets:
+            timestamp = bucket["key_as_string"]
+            for host_bucket in bucket["by_host"]["buckets"]:
+                avg_val = host_bucket["avg_cpu"]["value"]
+                if avg_val is not None:
+                    data.append({
+                        "time_bucket": timestamp,
+                        "hostname": host_bucket["key"],
+                        "cpu_pct": avg_val
+                    })
     
-    for bucket in buckets:
-        timestamp = bucket["key_as_string"]
-        for host_bucket in bucket["by_host"]["buckets"]:
-            avg_val = host_bucket["avg_cpu"]["value"]
-            if avg_val is not None:
-                data.append({
-                    "time_bucket": timestamp,
-                    "hostname": host_bucket["key"],
-                    "cpu_pct": avg_val
-                })
-
-    df = pd.DataFrame(data)
-    if not df.empty:
-        df["time_bucket"] = pd.to_datetime(df["time_bucket"])
-    return df
+        df = pd.DataFrame(data)
+        if not df.empty:
+            df["time_bucket"] = pd.to_datetime(df["time_bucket"])
+        return df
 # ========================
 # 7) VyOS Dashboard
 # ========================
