@@ -293,7 +293,6 @@ if st.sidebar.button(T["refresh"]):
 # ========================
 if dashboard_type == T["dash_status"]:
     st.subheader(T["status_board"])
-    st.info(T["status_legend"] + " (Mount point: /)")
 
     # Lấy dữ liệu metric (tăng size để vẽ biểu đồ cho đẹp)
     dfm = query_metrics(time_range, size=3000)
@@ -441,7 +440,7 @@ elif dashboard_type == T["dash_security"]:
                         text_auto=True,
                         title="Top Hosts with Failures"
                     )
-                    fig.update_layout(showlegend=False)
+                    fig.update_layout(showlegend=True)
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No hosts found.")
