@@ -473,7 +473,7 @@ elif dashboard_type == T["dash_syslog"]:
                 placeholder="Choose Host"
             )
         else:
-            st.info("Không có dữ liệu.")
+            st.info("No data found.")
 
     # --- 4. APPLY LOCAL FILTERS ---
     if not df.empty:
