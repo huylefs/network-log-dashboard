@@ -393,7 +393,7 @@ elif dashboard_type == T["dash_security"]:
         st.warning(T["no_syslog_range"])
     else:
         # Chỉ lọc log thất bại
-        df_fail = dfs[dfs["message"].str.contains("authentication failure", case=False, na=False)]
+        df_fail = dfs[dfs["message"].str.contains("Failed password", case=False, na=False)]
 
         # Hiển thị Metric duy nhất
         st.metric(T["sec_failed"], len(df_fail), delta_color="inverse")
