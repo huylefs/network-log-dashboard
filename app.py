@@ -262,16 +262,27 @@ st.title(T["title"])
 st.caption(T["caption"])
 
 # Chọn Dashboard
+menu_options = [
+    T["dash_status"],
+    T["dash_security"],
+    T["dash_syslog"],
+    T["dash_vyos"]
+]
+
+# 2. Khởi tạo index trong session_state nếu chưa có
+if "dash_index" not in st.session_state:
+    st.session_state["dash_index"] = 0
+
+# 3. Tạo Radio button với index lấy từ session_state
 dashboard_type = st.sidebar.radio(
     T["select_dashboard"],
-    [
-        T["dash_status"],       
-        T["dash_security"],
-        T["dash_syslog"], 
-        T["dash_vyos"]
-    ],
-    index=0,
+    menu_options,
+    index=st.session_state["dash_index"]
 )
+
+# 4. Cập nhật lại index vào session_state ngay sau khi người dùng chọn
+# (Để lần sau reload/đổi ngôn ngữ nó nhớ vị trí này)
+st.session_state["dash_index"] = menu_options.index(dashboard_type)
 
 time_range = st.sidebar.selectbox(T["time_range"], T["ranges"], index=0)
 st.sidebar.markdown("---")
