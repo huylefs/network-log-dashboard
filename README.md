@@ -5,10 +5,8 @@ A real-time network monitoring dashboard built with **Streamlit** and **Elastics
 ## 📋 Table of Contents
 
 - [Features](#-features)
-- [Architecture](#-architecture)
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
-- [Configuration](#-configuration)
 - [Usage](#-usage)
 - [Dashboard Modules](#-dashboard-modules)
 - [Data Sources](#-data-sources)
@@ -77,44 +75,6 @@ pip install -r requirements.txt
 - `elasticsearch>=8.0.0,<9.0.0` - Elasticsearch Python client
 - `plotly>=6.0.0` - Interactive visualizations
 
-## ⚙️ Configuration
-
-### Streamlit Secrets
-
-Create a `.streamlit/secrets.toml` file in your project directory:
-
-```toml
-# Elasticsearch Configuration
-ES_HOST = "your-elasticsearch-host.com"
-ES_PORT = 9243
-ES_USER = "your-username"
-ES_PASS = "your-password"
-ES_SCHEME = "https"
-```
-
-### Configuration Parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `ES_HOST` | Elasticsearch hostname or IP | *Required* |
-| `ES_PORT` | Elasticsearch port | `9243` |
-| `ES_USER` | Authentication username | *Required* |
-| `ES_PASS` | Authentication password | *Required* |
-| `ES_SCHEME` | Connection scheme (`http`/`https`) | `https` |
-
-### Elasticsearch Index Patterns
-
-The dashboard queries the following index patterns:
-
-- **`syslog-*`**: Contains syslog events with fields:
-  - `@timestamp`, `message`, `host.hostname`, `host.ip`
-  - `log.syslog.severity.code`, `log.syslog.severity.name`
-
-- **`metricbeat-*`**: Contains system metrics with fields:
-  - `@timestamp`, `host.hostname`, `host.ip`
-  - `system.cpu.total.norm.pct`
-  - `system.memory.actual.used.pct`
-  - `system.filesystem.used.pct`, `system.filesystem.mount_point`
 
 ## 📖 Usage
 
