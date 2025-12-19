@@ -12,10 +12,7 @@ A real-time network monitoring dashboard built with **Streamlit** and **Elastics
 - [Usage](#-usage)
 - [Dashboard Modules](#-dashboard-modules)
 - [Data Sources](#-data-sources)
-- [Screenshots](#-screenshots)
 - [Troubleshooting](#-troubleshooting)
-- [Contributing](#-contributing)
-- [License](#-license)
 
 ## ✨ Features
 
