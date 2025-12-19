@@ -36,20 +36,6 @@ A real-time network monitoring dashboard built with **Streamlit** and **Elastics
 - 🔄 **Real-time Refresh**: Manual data refresh with cache clearing
 - 🎨 **Color-coded Alerts**: Visual highlighting for critical metrics (>75% threshold)
 
-## 🏗️ Architecture
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Data Sources  │───> │  Elasticsearch  │───> │    Streamlit    │
-│                 │     │    Cluster      │     │    Dashboard    │
-│ • Syslog        │     │                 │     │                 │
-│ • Metricbeat    │     │ • syslog-*      │     │ • System Status │
-│                 │     │ • metricbeat-*  │     │ • Security      │
-│                 │     │                 │     │ • Syslog Viewer │
-│                 │     │                 │     │ • VyOS Logs     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
-
 ## 📦 Prerequisites
 
 - **Python**: 3.8 or higher
