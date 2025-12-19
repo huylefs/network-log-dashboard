@@ -2,11 +2,6 @@
 
 A real-time network monitoring dashboard built with **Streamlit** and **Elasticsearch**, providing comprehensive visibility into system metrics, security events, syslog data, and network device logs.
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.0+-red.svg)
-![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.x-yellow.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-
 ## 📋 Table of Contents
 
 - [Features](#-features)
@@ -25,7 +20,7 @@ A real-time network monitoring dashboard built with **Streamlit** and **Elastics
 ## ✨ Features
 
 ### Multi-Language Support
-- **English** and **Vietnamese (Tiếng Việt)** interface
+- **English** and **Vietnamese (Tiếng Việt)**
 - Seamless language switching via sidebar
 
 ### Four Comprehensive Dashboard Modules
@@ -48,11 +43,11 @@ A real-time network monitoring dashboard built with **Streamlit** and **Elastics
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Data Sources  │────▶│  Elasticsearch  │────▶│    Streamlit    │
+│   Data Sources  │───> │  Elasticsearch  │───> │    Streamlit    │
 │                 │     │    Cluster      │     │    Dashboard    │
 │ • Syslog        │     │                 │     │                 │
 │ • Metricbeat    │     │ • syslog-*      │     │ • System Status │
-│ • Network Logs  │     │ • metricbeat-*  │     │ • Security      │
+│                 │     │ • metricbeat-*  │     │ • Security      │
 │                 │     │                 │     │ • Syslog Viewer │
 │                 │     │                 │     │ • VyOS Logs     │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
@@ -162,7 +157,7 @@ streamlit run app.py --server.address 0.0.0.0 --server.port 80
 
 ## 📊 Dashboard Modules
 
-### 1. System Metrics (`dash_status`)
+### 1. System Metrics
 
 Monitor the health of your infrastructure:
 
@@ -176,7 +171,7 @@ Monitor the health of your infrastructure:
   - Memory usage over time (per host)
   - Multi-select host filtering
 
-### 2. Security Dashboard (`dash_security`)
+### 2. Security Dashboard
 
 Track SSH security events:
 
@@ -190,7 +185,7 @@ Track SSH security events:
 - **Detection Pattern**
   - Searches for "Failed password" in syslog messages
 
-### 3. Syslog Dashboard (`dash_syslog`)
+### 3. Syslog Dashboard
 
 Centralized log management:
 
@@ -205,7 +200,7 @@ Centralized log management:
   - Severity distribution (pie chart)
   - Detailed events table
 
-### 4. VyOS Network Device Dashboard (`dash_vyos`)
+### 4. VyOS Network Device Dashboard
 
 Dedicated view for network equipment:
 
@@ -306,24 +301,5 @@ Dedicated view for network equipment:
 
 Enable Elasticsearch query debugging by checking the Streamlit error messages displayed when queries fail.
 
-### Performance Tips
 
-- Reduce time range for faster queries
-- Use specific hostname filters to limit data volume
-- The dashboard queries up to 2000-3000 documents per request
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-**Built with ❤️ using Streamlit + Elasticsearch**
